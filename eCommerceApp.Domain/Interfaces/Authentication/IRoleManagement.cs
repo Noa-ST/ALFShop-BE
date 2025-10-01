@@ -5,6 +5,6 @@ namespace eCommerceApp.Domain.Interfaces.Authentication
     public interface IRoleManagement
     {
         Task<string?> GetUserRole(string userEmail);
-        Task<bool> AddUserToRole(AppUser user, string roleName);
+        Task<bool> AddUserToRole(User user, string roleName);
     }
 }

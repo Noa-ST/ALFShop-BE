@@ -5,11 +5,11 @@ namespace eCommerceApp.Domain.Interfaces.Authentication
 {
     public interface IUserManagement
     {
-        Task<bool> CreateUser(AppUser user, string password);
-        Task<bool> LoginUser(AppUser user);
-        Task<AppUser?> GetUserByEmail(string email);
-        Task<AppUser> GetUserById(string id);
-        Task<IEnumerable<AppUser>?> GetAllUsers();
+        Task<bool> CreateUser(User user, string password);
+        Task<bool> LoginUser(User user);
+        Task<User?> GetUserByEmail(string email);
+        Task<User> GetUserById(string id);
+        Task<IEnumerable<User>?> GetAllUsers();
         Task<int> RemoveUserByEmail(string email);
         Task<List<Claim>> GetUserClaims(string email);
     }

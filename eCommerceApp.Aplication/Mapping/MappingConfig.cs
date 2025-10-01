@@ -20,8 +20,8 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<Category, GetCategory>();
             CreateMap<Product, GetProduct>();
 
-            CreateMap<CreateUser, AppUser>();
-            CreateMap<LoginUser, AppUser>();
+            CreateMap<CreateUser, User>();
+            CreateMap<LoginUser, User>();
         }
     }
 }

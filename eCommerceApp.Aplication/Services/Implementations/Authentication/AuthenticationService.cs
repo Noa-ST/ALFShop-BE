@@ -17,7 +17,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
             var _validationResult = await validationService.ValidateAsync(user, createUserValidator);
             if (!_validationResult.Success) return _validationResult;
 
-            var mappedModel = mapper.Map<AppUser>(user);
+            var mappedModel = mapper.Map<User>(user);
             mappedModel.UserName = user.Email;
             // Không gán PasswordHash, để Identity xử lý băm
 
@@ -53,7 +53,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
             if (!_validationResult.Success)
                 return new LoginResponse(Message: _validationResult.Message);
 
-            var mappedModel = mapper.Map<AppUser>(user);
+            var mappedModel = mapper.Map<User>(user);
             mappedModel.PasswordHash = user.Password;
             bool loginResult = await userManagement.LoginUser(mappedModel);
 
@@ -83,7 +83,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                 return new LoginResponse(Message: "Invalid token");
 
             string userId = await tokenManagement.GetUserIdByRefreshToken(refreshToken);
-            AppUser? user = await userManagement.GetUserById(userId);
+            User? user = await userManagement.GetUserById(userId);
             var claims = await userManagement.GetUserClaims(user!.Email!);
             string newJwtToken = tokenManagement.GenerateToken(claims);
             string newRefreshToken = tokenManagement.GetRefreshToken();

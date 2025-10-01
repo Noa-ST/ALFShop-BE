@@ -7,9 +7,9 @@ using System.Security.Claims;
 
 namespace eCommerceApp.Infrastructure.Repositories.Authentication
 {
-    public class UserManagement(IRoleManagement roleManagement, UserManager<AppUser> userManager, AppDbContext context) : IUserManagement
+    public class UserManagement(IRoleManagement roleManagement, UserManager<User> userManager, AppDbContext context) : IUserManagement
     {
-        public async Task<bool> CreateUser(AppUser user, string password)
+        public async Task<bool> CreateUser(User user, string password)
         {
             var _user = await GetUserByEmail(user.Email!);
             if (_user != null) return false;
@@ -19,13 +19,13 @@ namespace eCommerceApp.Infrastructure.Repositories.Authentication
             return result.Succeeded;
         }
 
-        public async Task<IEnumerable<AppUser>?> GetAllUsers() => await context.Users.ToListAsync();
+        public async Task<IEnumerable<User>?> GetAllUsers() => await context.Users.ToListAsync();
 
 
-        public async Task<AppUser?> GetUserByEmail(string email) => await userManager.FindByEmailAsync(email);
+        public async Task<User?> GetUserByEmail(string email) => await userManager.FindByEmailAsync(email);
 
 
-        public async Task<AppUser> GetUserById(string id)
+        public async Task<User> GetUserById(string id)
         {
             var user = await userManager.FindByIdAsync(id);
             return user!;
@@ -46,7 +46,7 @@ namespace eCommerceApp.Infrastructure.Repositories.Authentication
             return claims;
         }
 
-        public async Task<bool> LoginUser(AppUser user)
+        public async Task<bool> LoginUser(User user)
         {
             var _user = await GetUserByEmail(user.Email!);
             if (_user is null) return false;

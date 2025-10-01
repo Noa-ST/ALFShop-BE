@@ -36,7 +36,7 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IGeneric<Category>, GenericRepository<Category>>();
             services.AddScoped(typeof(IAppLogger<>), typeof(SerilogLoggerAdapter<>));
 
-            services.AddDefaultIdentity<AppUser>(options =>
+            services.AddDefaultIdentity<User>(options =>
             {
                 options.SignIn.RequireConfirmedEmail = true;
                 options.Tokens.EmailConfirmationTokenProvider = TokenOptions.DefaultEmailProvider;

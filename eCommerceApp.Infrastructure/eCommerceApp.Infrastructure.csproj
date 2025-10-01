@@ -33,4 +33,8 @@
 		<ProjectReference Include="..\eCommerceApp.Aplication\eCommerceApp.Aplication.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Migrations\" />
+	</ItemGroup>
+
 </Project>
