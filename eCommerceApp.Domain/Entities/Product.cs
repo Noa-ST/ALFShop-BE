@@ -4,11 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace eCommerceApp.Domain.Entities
 {
-    public class Product
+    public class Product : AuditableEntity
     {
-        [Key]
-        public Guid ProductId { get; set; }
-
         public Guid ShopId { get; set; }
         public Guid CategoryId { get; set; }
 
@@ -21,10 +18,6 @@ namespace eCommerceApp.Domain.Entities
 
         public int StockQuantity { get; set; }
         public ProductStatus Status { get; set; } = ProductStatus.Pending;
-        public bool IsDeleted { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-
         // Navigation
         [ForeignKey(nameof(ShopId))]
         public Shop? Shop { get; set; }

@@ -5,11 +5,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace eCommerceApp.Domain.Entities
 {
-    public class Order
+    public class Order : AuditableEntity
     {
-        [Key]
-        public Guid OrderId { get; set; }
-
         public string CustomerId { get; set; } = null!; // FK -> User.Id
         public Guid AddressId { get; set; } // FK -> Address.AddressId
 
@@ -17,9 +14,6 @@ namespace eCommerceApp.Domain.Entities
         public decimal TotalAmount { get; set; }
 
         public OrderStatus Status { get; set; } = OrderStatus.Pending;
-        public bool IsDeleted { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
 
         [ForeignKey(nameof(CustomerId))]
         public User? Customer { get; set; }

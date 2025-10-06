@@ -1,41 +1,49 @@
-using eCommerceApp.Aplication.DependencyInjection;
+﻿using eCommerceApp.Aplication.DependencyInjection;
 using eCommerceApp.Infrastructure.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Serilog;
+
 var builder = WebApplication.CreateBuilder(args);
 
+// ---- Serilog ----
 Log.Logger = new LoggerConfiguration()
-.Enrich.FromLogContext()
-.WriteTo.Console()
-.WriteTo.File("log/log.txt", rollingInterval: RollingInterval.Day)
-.CreateLogger();
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File("log/log.txt", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
 
 builder.Host.UseSerilog();
 Log.Logger.Information("Application is building...");
-// Add services to the container.
 
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// ---- Application & Infrastructure DI ----
 builder.Services.AddInfrastructureService(builder.Configuration);
 builder.Services.AddApplicationService();
 
-builder.Services.AddCors(builder =>
+builder.Services.AddControllers();
+
+// ---- Swagger ----
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// ---- CORS ----
+builder.Services.AddCors(opt =>
 {
-    builder.AddDefaultPolicy(options =>
+    opt.AddDefaultPolicy(policy =>
     {
-        options.AllowAnyHeader()
-    .AllowAnyMethod().WithOrigins("https://localhost:7109;").AllowCredentials();
+        policy.AllowAnyHeader()
+              .AllowAnyMethod()
+              .WithOrigins("https://localhost:7109")
+              .AllowCredentials();
     });
 });
+
+// ---- Build app ----
 try
 {
     var app = builder.Build();
+
     app.UseCors();
     app.UseSerilogRequestLogging();
-    // Configure the HTTP request pipeline.
+
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
@@ -44,12 +52,17 @@ try
 
     app.UseHttpsRedirection();
 
+    // ⚠️ Quan trọng: auth đã đăng ký trong ServiceContainer,
+    // nên ở đây chỉ cần UseAuthentication + UseAuthorization
+    app.UseAuthentication();
     app.UseAuthorization();
 
     app.MapControllers();
-    Log.Logger.Information("Application is building...");
+
+    Log.Logger.Information("Application is running...");
     app.Run();
-}catch(Exception ex)
+}
+catch (Exception ex)
 {
     Log.Logger.Error(ex, "Application failed to start....");
 }
@@ -57,4 +70,3 @@ finally
 {
     Log.CloseAndFlush();
 }
-

@@ -3,22 +3,29 @@ using FluentValidation;
 
 namespace eCommerceApp.Aplication.Validations
 {
+    /// <summary>
+    /// Cài đặt cho IValidationService
+    /// Dùng FluentValidation để validate DTOs.
+    /// Gom các lỗi về dạng chuỗi Message duy nhất.
+    /// </summary>
     public class ValidationService : IValidationService
     {
         public async Task<ServiceResponse> ValidateAsync<T>(T model, IValidator<T> validator)
         {
             var validationResult = await validator.ValidateAsync(model);
+
             if (!validationResult.IsValid)
             {
-                var errors = validationResult.Errors.Select(e => e.ErrorMessage).ToList();
+                // Gộp tất cả error message lại thành một chuỗi
+                var errors = validationResult.Errors
+                                             .Select(e => e.ErrorMessage)
+                                             .ToList();
                 string errorsToString = string.Join("; ", errors);
-                return new ServiceResponse
-                {
-                    Message = errorsToString
-                };
-            }
-            return new ServiceResponse { Success = true };
 
+                return new ServiceResponse(false, errorsToString);
+            }
+
+            return new ServiceResponse(true, "Validation successful");
         }
     }
 }

@@ -1,6 +1,5 @@
 ﻿using eCommerceApp.Aplication.DTOs.Identity;
 using eCommerceApp.Aplication.Services.Interfaces.Authentication;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace eCommerceApp.Host.Controllers

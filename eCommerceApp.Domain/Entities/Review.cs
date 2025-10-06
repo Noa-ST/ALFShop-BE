@@ -5,21 +5,14 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace eCommerceApp.Domain.Entities
 {
-    public class Review
+    public class Review : AuditableEntity
     {
-        [Key]
-        public Guid ReviewId { get; set; }
-
         public Guid ProductId { get; set; }
         public string UserId { get; set; } = null!; // FK -> User.Id
 
         public int Rating { get; set; }
         public string? Comment { get; set; }
         public ReviewStatus Status { get; set; } = ReviewStatus.Pending;
-
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-
         [ForeignKey(nameof(ProductId))]
         public Product? Product { get; set; }
 

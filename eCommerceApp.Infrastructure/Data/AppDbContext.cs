@@ -2,16 +2,17 @@
 using Microsoft.EntityFrameworkCore;
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Entities.Identity;
+using eCommerceApp.Domain.Enums;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 
 namespace eCommerceApp.Infrastructure.Data
 {
-    public class AppDbContext : DbContext
+    public class AppDbContext : IdentityDbContext<User, IdentityRole, string>
     {
         public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options) { }
 
-        // DbSets
-        public DbSet<User> Users { get; set; } = null!;
         public DbSet<Shop> Shops { get; set; } = null!;
         public DbSet<Category> Categories { get; set; } = null!;
         public DbSet<Product> Products { get; set; } = null!;

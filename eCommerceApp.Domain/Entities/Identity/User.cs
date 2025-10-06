@@ -8,7 +8,6 @@ namespace eCommerceApp.Domain.Entities.Identity
     public class User : IdentityUser
     {
         public string FullName { get; set; } = string.Empty;
-        public Role Role { get; set; } = Role.Customer; // maps to role enum column
         public bool IsDeleted { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

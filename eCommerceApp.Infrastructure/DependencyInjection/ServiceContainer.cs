@@ -20,26 +20,43 @@ using eCommerceApp.Infrastructure.Repositories.Authentication;
 
 namespace eCommerceApp.Infrastructure.DependencyInjection
 {
+    /// <summary>
+    /// ServiceContainer chịu trách nhiệm gom nhóm và đăng ký tất cả service ở tầng Infrastructure vào Dependency Injection Container.
+    /// </summary>
     public static class ServiceContainer
     {
+        // Hàm mở rộng: dùng để đăng ký tất cả service tầng Infrastructure vào DI Container
         public static IServiceCollection AddInfrastructureService(this IServiceCollection services, IConfiguration config)
         {
-            string connectionString = "Default";
-            services.AddDbContext<AppDbContext>(options => options.UseSqlServer(config.GetConnectionString(connectionString), sqlOptions =>
-            {
-                sqlOptions.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
-                sqlOptions.EnableRetryOnFailure();
-            }),
-            ServiceLifetime.Scoped);
+            // 1. DbContext (SQL Server)
+            // Kết nối database qua ConnectionString (Default)
+            services.AddDbContext<AppDbContext>(options =>
+                options.UseSqlServer(config.GetConnectionString("Default"), sqlOptions =>
+                {
+                    // Chỉ rõ assembly chứa migration
+                    sqlOptions.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
+                    // Retry khi kết nối DB fail
+                    sqlOptions.EnableRetryOnFailure();
+                }),
+                ServiceLifetime.Scoped);
 
+            //2. Generic Repositories 
+            // Đăng ký Repository (theo pattern Generic Repository)
             services.AddScoped<IGeneric<Product>, GenericRepository<Product>>();
             services.AddScoped<IGeneric<Category>, GenericRepository<Category>>();
+
+            // 3. Logging Adapter
+            // Dùng Serilog làm logger cho toàn bộ app (thay vì ILogger mặc định)
             services.AddScoped(typeof(IAppLogger<>), typeof(SerilogLoggerAdapter<>));
 
+            // 4. Identity + Roles
+            // Thêm ASP.NET Identity (User + Role)
             services.AddDefaultIdentity<User>(options =>
             {
-                options.SignIn.RequireConfirmedEmail = true;
+                options.SignIn.RequireConfirmedEmail = true; 
                 options.Tokens.EmailConfirmationTokenProvider = TokenOptions.DefaultEmailProvider;
+
+                // Quy tắc password
                 options.Password.RequireDigit = true;
                 options.Password.RequireNonAlphanumeric = true;
                 options.Password.RequiredLength = 8;
@@ -47,40 +64,53 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
                 options.Password.RequireUppercase = true;
                 options.Password.RequiredUniqueChars = 1;
             })
-           .AddRoles<IdentityRole>()
-           .AddEntityFrameworkStores<AppDbContext>();
+            .AddRoles<IdentityRole>()                  
+            .AddEntityFrameworkStores<AppDbContext>();  // Lưu user + role trong database AppDbContext
+
+            // 5. JWT Authentication 
             services.AddAuthentication(options =>
             {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme; 
                 options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            }).AddJwtBearer(options =>
+            })
+            .AddJwtBearer(options =>
             {
                 options.SaveToken = true;
-                options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters()
+                options.TokenValidationParameters = new TokenValidationParameters()
                 {
                     ValidateAudience = true,
                     ValidateIssuer = true,
                     ValidateLifetime = true,
                     RequireExpirationTime = true,
                     ValidateIssuerSigningKey = true,
-                    ValidIssuer = config["JWT: Issuer"],
-                    ValidAudience = config["JWT: Audience"],
-                    ClockSkew = TimeSpan.Zero,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["JWT:Key"]!))
+                    // Đọc config JWT từ appsettings.json
+                    ValidIssuer = config["JWT:Issuer"],
+                    ValidAudience = config["JWT:Audience"],
+                    ClockSkew = TimeSpan.Zero, // không delay thời gian hết hạn
+                    IssuerSigningKey = new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(config["JWT:Key"]!)
+                    )
                 };
             });
 
+            // 6. Custom Authentication Services            
             services.AddScoped<IUserManagement, UserManagement>();
             services.AddScoped<ITokenManagement, TokenManagement>();
             services.AddScoped<IRoleManagement, RoleManagement>();
+            services.AddScoped<ICategoryRepository, CategoryRepository>();
+            services.AddScoped<IShopRepository, ShopRepository>();
+
+
             return services;
         }
+
+        // Middleware tuỳ chỉnh
         public static IApplicationBuilder UseInfrastructureService(this IApplicationBuilder app)
         {
-
-            app.UseMiddleware<ExceptionHandlingMiddleware>();
+            app.UseMiddleware<ExceptionHandlingMiddleware>(); // Bắt lỗi global, trả JSON thay vì crash
             return app;
         }
     }
 }
+

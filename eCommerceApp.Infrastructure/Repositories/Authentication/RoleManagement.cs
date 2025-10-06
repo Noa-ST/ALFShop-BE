@@ -1,8 +1,6 @@
 ﻿using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces.Authentication;
 using Microsoft.AspNetCore.Identity;
-using System.Reflection.Emit;
-using System.Runtime.ConstrainedExecution;
 
 namespace eCommerceApp.Infrastructure.Repositories.Authentication
 {

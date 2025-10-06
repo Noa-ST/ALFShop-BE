@@ -4,11 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace eCommerceApp.Domain.Entities
 {
-    public class Address
+    public class Address : AuditableEntity
     {
-        [Key]
-        public Guid AddressId { get; set; }
-
         public string UserId { get; set; } = null!; // FK -> User.Id
 
         [Required]
@@ -21,9 +18,6 @@ namespace eCommerceApp.Domain.Entities
         public string Country { get; set; } = null!;
 
         public bool IsDefault { get; set; }
-        public bool IsDeleted { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
 
         [ForeignKey(nameof(UserId))]
         public User? User { get; set; }

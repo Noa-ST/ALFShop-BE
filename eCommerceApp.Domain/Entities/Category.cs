@@ -2,16 +2,15 @@
 
 namespace eCommerceApp.Domain.Entities
 {
-    public class Category
+    public class Category : AuditableEntity
     {
-        [Key]
-        public Guid CategoryId { get; set; }
-
         [Required]
         public string Name { get; set; } = null!;
         public string? Description { get; set; }
-        public bool IsDeleted { get; set; }
 
         public ICollection<Product>? Products { get; set; }
+        // Quan hệ với Shop
+        public Guid ShopId { get; set; }
+        public Shop? Shop { get; set; }
     }
 }

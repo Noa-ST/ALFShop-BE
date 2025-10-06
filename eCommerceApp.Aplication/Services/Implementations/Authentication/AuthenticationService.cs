@@ -7,84 +7,118 @@ using eCommerceApp.Aplication.Validations;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces.Authentication;
 using FluentValidation;
+using Microsoft.AspNetCore.Identity;
+using System.Security.Claims;
 
 namespace eCommerceApp.Aplication.Services.Implementations.Authentication
 {
-    public class AuthenticationService(ITokenManagement tokenManagement, IUserManagement userManagement, IRoleManagement roleManagement, IAppLogger<AuthenticationService> logger, IMapper mapper, IValidator<CreateUser> createUserValidator, IValidator<LoginUser> loginUserValidator, IValidationService validationService) : IAuthenticationService
+    public class AuthenticationService(
+        ITokenManagement tokenManagement,
+        IMapper mapper,
+        IValidator<CreateUser> createUserValidator,
+        IValidator<LoginUser> loginUserValidator,
+        IValidationService validationService,
+        UserManager<User> userManager,
+        RoleManager<IdentityRole> roleManager
+    ) : IAuthenticationService
     {
+        // Đăng ký tài khoản Customer hoặc Seller
         public async Task<ServiceResponse> CreateUser(CreateUser user)
         {
-            var _validationResult = await validationService.ValidateAsync(user, createUserValidator);
-            if (!_validationResult.Success) return _validationResult;
+            var validation = await validationService.ValidateAsync(user, createUserValidator);
+            if (!validation.Success) return validation;
 
             var mappedModel = mapper.Map<User>(user);
             mappedModel.UserName = user.Email;
-            // Không gán PasswordHash, để Identity xử lý băm
 
-            var result = await userManagement.CreateUser(mappedModel, user.Password); // Truyền password riêng
-            if (!result)
-                return new ServiceResponse { Message = "Email Address might be already in use or unknown error occurred" };
-
-            var _user = await userManagement.GetUserByEmail(user.Email);
-            if (_user == null || _user.Email == null)
+            var result = await userManager.CreateAsync(mappedModel, user.Password);
+            if (!result.Succeeded)
             {
-                logger.LogError(new Exception($"No user with email {user.Email} found after creation"), "Unexpected error while retrieving user");
-                return new ServiceResponse { Message = "Error occurred while creating account" };
-            }
-
-            var users = await userManagement.GetAllUsers();
-            bool assignedResult = await roleManagement.AddUserToRole(_user!, users!.Count() > 1 ? "User" : "Admin");
-            if (!assignedResult)
-            {
-                int removeUserResult = await userManagement.RemoveUserByEmail(_user!.Email);
-                if (removeUserResult <= 0)
+                return new ServiceResponse
                 {
-                    logger.LogError(new Exception($"User with Email as {_user.Email} failed to be remove as a result of role assigning issue"), "User could not be assigned Role");
-                    return new ServiceResponse { Message = "Error occurred in create account" };
-                }
+                    Message = string.Join(";", result.Errors.Select(e => e.Description))
+                };
             }
+
+            // Xác định role (Admin seed sẵn, chỉ Customer hoặc Seller được tạo qua API)
+            var roleToAssign = user.Role == "Seller" ? "Seller" : "Customer";
+            if (!await roleManager.RoleExistsAsync(roleToAssign))
+            {
+                await roleManager.CreateAsync(new IdentityRole(roleToAssign));
+            }
+
+            var assignResult = await userManager.AddToRoleAsync(mappedModel, roleToAssign);
+            if (!assignResult.Succeeded)
+            {
+                await userManager.DeleteAsync(mappedModel);
+                return new ServiceResponse { Message = "Error occurred while assigning role" };
+            }
+
             return new ServiceResponse { Success = true, Message = "Account created!" };
         }
 
+        // Đăng nhập
         public async Task<LoginResponse> LoginUser(LoginUser user)
         {
-            var _validationResult = await validationService.ValidateAsync(user, loginUserValidator);
+            var validation = await validationService.ValidateAsync(user, loginUserValidator);
+            if (!validation.Success)
+                return new LoginResponse(Message: validation.Message);
 
-            if (!_validationResult.Success)
-                return new LoginResponse(Message: _validationResult.Message);
+            var _user = await userManager.FindByEmailAsync(user.Email);
+            if (_user == null)
+                return new LoginResponse(Message: "Email not found");
 
-            var mappedModel = mapper.Map<User>(user);
-            mappedModel.PasswordHash = user.Password;
-            bool loginResult = await userManagement.LoginUser(mappedModel);
+            var validPassword = await userManager.CheckPasswordAsync(_user, user.Password);
+            if (!validPassword)
+                return new LoginResponse(Message: "Invalid credentials");
 
-            if (!loginResult)
-                return new LoginResponse(Message: "Email not found or invalid credentials");
+            // Claims
+            var roles = await userManager.GetRolesAsync(_user);
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, _user.Id),
+                new Claim(ClaimTypes.Email, _user.Email!),
+                new Claim("Fullname", _user.FullName ?? "")
+            };
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
 
-            var _user = await userManagement.GetUserByEmail(user.Email);
-            var claims = await userManagement.GetUserClaims(_user!.Email!);
             string jwtToken = tokenManagement.GenerateToken(claims);
             string refreshToken = tokenManagement.GetRefreshToken();
 
-            int saveTokenResult = 0;
-            bool userTokencheck = await tokenManagement.ValidateRefreshToken(refreshToken);
-            if(userTokencheck)
-                saveTokenResult = await tokenManagement.UpdateRefreshToken(_user.Id, refreshToken);
-            else
-                saveTokenResult = await tokenManagement.AddRefreshToken(_user.Id, refreshToken);
+            int saveTokenResult = await tokenManagement.AddRefreshToken(_user.Id, refreshToken);
 
-            return saveTokenResult <= 0 ? new LoginResponse(Message: "Internal error occurred while authenticating") : new LoginResponse(Success: true, Token: jwtToken, RefreshToken: refreshToken);
+            return saveTokenResult <= 0
+                ? new LoginResponse(Message: "Internal error occurred while authenticating")
+                : new LoginResponse(Success: true, Token: jwtToken, RefreshToken: refreshToken);
         }
 
+        // Làm mới token
         public async Task<LoginResponse> ReviveToken(string refreshToken)
         {
             bool validateTokenResult = await tokenManagement.ValidateRefreshToken(refreshToken);
-
             if (!validateTokenResult)
                 return new LoginResponse(Message: "Invalid token");
 
             string userId = await tokenManagement.GetUserIdByRefreshToken(refreshToken);
-            User? user = await userManagement.GetUserById(userId);
-            var claims = await userManagement.GetUserClaims(user!.Email!);
+            var user = await userManager.FindByIdAsync(userId);
+            if (user == null)
+                return new LoginResponse(Message: "User not found");
+
+            var roles = await userManager.GetRolesAsync(user);
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Email, user.Email!),
+                new Claim("Fullname", user.FullName ?? "")
+            };
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
             string newJwtToken = tokenManagement.GenerateToken(claims);
             string newRefreshToken = tokenManagement.GetRefreshToken();
 

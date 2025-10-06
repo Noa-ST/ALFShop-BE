@@ -3,11 +3,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace eCommerceApp.Domain.Entities
 {
-    public class Promotion
+    public class Promotion : AuditableEntity
     {
-        [Key]
-        public Guid PromoId { get; set; }
-
         public Guid? ShopId { get; set; }
         public Guid? ProductId { get; set; }
 
@@ -19,9 +16,6 @@ namespace eCommerceApp.Domain.Entities
 
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
-        public bool IsDeleted { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
 
         [ForeignKey(nameof(ShopId))]
         public Shop? Shop { get; set; }
