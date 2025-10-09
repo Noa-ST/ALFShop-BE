@@ -6,9 +6,11 @@ namespace eCommerceApp.Aplication.Services.Interfaces
     public interface IProductService
     {
         Task<IEnumerable<GetProduct>> GetAllAsync();
-        Task<GetProduct> GetByIdAsync(Guid id);
+        Task<IEnumerable<GetProduct>> GetByShopIdAsync(Guid shopId);
+        Task<IEnumerable<GetProduct>> GetByCategoryIdAsync(Guid categoryId);
+        Task<GetProductDetail?> GetDetailByIdAsync(Guid id);
         Task<ServiceResponse> AddAsync(CreateProduct product);
-        Task<ServiceResponse> UpdateAsync(UpdateProduct product);
-        Task<ServiceResponse> DeleteAsync(Guid id); 
+        Task<ServiceResponse> UpdateAsync(Guid id, UpdateProduct product);
+        Task<ServiceResponse> DeleteAsync(Guid id);
     }
 }

@@ -44,6 +44,8 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             // Đăng ký Repository (theo pattern Generic Repository)
             services.AddScoped<IGeneric<Product>, GenericRepository<Product>>();
             services.AddScoped<IGeneric<Category>, GenericRepository<Category>>();
+            services.AddScoped<IGeneric<Shop>, GenericRepository<Shop>>();
+
 
             // 3. Logging Adapter
             // Dùng Serilog làm logger cho toàn bộ app (thay vì ILogger mặc định)
@@ -100,7 +102,8 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IRoleManagement, RoleManagement>();
             services.AddScoped<ICategoryRepository, CategoryRepository>();
             services.AddScoped<IShopRepository, ShopRepository>();
-
+            services.AddScoped<IProductRepository, ProductRepository>();
+            services.AddScoped<IProductImageRepository, ProductImageRepository>();
 
             return services;
         }

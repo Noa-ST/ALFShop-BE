@@ -3,18 +3,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace eCommerceApp.Domain.Entities
 {
-    public class ProductImage
+    public class ProductImage : AuditableEntity
     {
-        [Key]
-        public Guid ImageId { get; set; }
-
-        public Guid ProductId { get; set; }
-
         [Required]
         public string Url { get; set; } = null!;
 
-        public DateTime CreatedAt { get; set; }
-
+        public Guid ProductId { get; set; }
         [ForeignKey(nameof(ProductId))]
         public Product? Product { get; set; }
     }

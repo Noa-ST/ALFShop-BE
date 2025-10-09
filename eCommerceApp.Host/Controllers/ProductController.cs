@@ -1,47 +1,73 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using eCommerceApp.Aplication.DTOs.Product;
 using eCommerceApp.Aplication.Services.Interfaces;
-using eCommerceApp.Aplication.DTOs.Product;
+using Microsoft.AspNetCore.Mvc;
 
 namespace eCommerceApp.Host.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class ProductController(IProductService productService) : ControllerBase
+    public class ProductsController(IProductService productService) : ControllerBase
     {
         [HttpGet("all")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetAll()
         {
             var data = await productService.GetAllAsync();
-            return data.Any()  ? Ok(data) : NotFound(data);
+            return data.Any() ? Ok(data) : NotFound(new { message = "No products found." });
         }
 
-        [HttpGet("single/{id}")]
-        public async Task<IActionResult> GetBySingle(Guid id)
+        [HttpGet("getbyshop/{shopId:guid}")]
+        public async Task<IActionResult> GetByShopId(Guid shopId)
         {
-            var data = await productService.GetByIdAsync(id);
-            return data != null ? Ok(data) : NotFound(data);
+            var data = await productService.GetByShopIdAsync(shopId);
+            return data.Any() ? Ok(data) : NotFound(new { message = "No products found for this shop." });
         }
 
-        [HttpPost("add")]
-        public async Task<IActionResult> Add(CreateProduct product)
+        [HttpGet("getbycategory/{categoryId:guid}")]
+        public async Task<IActionResult> GetByCategoryId(Guid categoryId)
         {
-            var result = await productService.AddAsync(product);
+            var data = await productService.GetByCategoryIdAsync(categoryId);
+            return data.Any() ? Ok(data) : NotFound(new { message = "No products found in this category." });
+        }
+
+        [HttpGet("detail/{id:guid}")]
+        public async Task<IActionResult> GetDetailById(Guid id)
+        {
+            var data = await productService.GetDetailByIdAsync(id);
+            return data != null ? Ok(data) : NotFound(new { message = "Product not found." });
+        }
+
+        [HttpPost("create")]
+        public async Task<IActionResult> Create([FromBody] CreateProduct dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await productService.AddAsync(dto);
+            return result.Success
+                ? Ok(new { message = result.Message })
+                : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPut("update/{id:guid}")]
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProduct dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await productService.UpdateAsync(id, dto); 
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPut("update")]
-        public async Task<IActionResult> Upfate(UpdateProduct product)
-        {
-            var result = await productService.UpdateAsync(product);
-            return result.Success ? Ok(result) : BadRequest(result);
-        }
 
-
-        [HttpDelete("delete/{id}")]
+        [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var result = await productService.DeleteAsync(id);
-            return result.Success ? Ok(result) : BadRequest(result);
+            return result.Success
+                ? Ok(new { message = result.Message })
+                : BadRequest(new { message = result.Message });
         }
     }
 }

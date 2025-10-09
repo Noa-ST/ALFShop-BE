@@ -31,7 +31,9 @@ builder.Services.AddCors(opt =>
     {
         policy.AllowAnyHeader()
               .AllowAnyMethod()
-              .WithOrigins("https://localhost:7109")
+              // ✅ Thay thế bằng địa chỉ của Frontend (React/Vite chạy trên cổng 5173)
+              // Cần thêm cả HTTP và HTTPS để linh hoạt trong môi trường dev
+              .WithOrigins("http://localhost:5173", "https://localhost:5173")
               .AllowCredentials();
     });
 });

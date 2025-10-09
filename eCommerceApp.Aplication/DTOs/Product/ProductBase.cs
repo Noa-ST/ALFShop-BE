@@ -5,17 +5,15 @@ namespace eCommerceApp.Aplication.DTOs.Product
     public class ProductBase
     {
         [Required]
-        public string? Name { get; set; }
-        [Required]
+        [MaxLength(200)]
+        public string Name { get; set; } = null!;
+
         public string? Description { get; set; }
-        [Required] 
-        [DataType(DataType.Currency)]
+
+        [Range(0, double.MaxValue)]
         public decimal Price { get; set; }
-        [Required]
-        public string? Base64Image { get; set; }
-        [Required]
-        public int Quantity { get; set; }
-        [Required]
-        public Guid CategoryId { get; set; }
+
+        [Range(0, int.MaxValue)]
+        public int StockQuantity { get; set; }
     }
 }

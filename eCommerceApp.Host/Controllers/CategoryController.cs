@@ -8,8 +8,7 @@ namespace eCommerceApp.Host.Controllers
     [ApiController]
     public class CategoryController(ICategoryService categoryService, ILogger<CategoryController> logger) : ControllerBase
     {
-        // GET: api/categories?shopId={shopId}
-        [HttpGet]
+        [HttpGet("get-all")]
         public async Task<IActionResult> GetAll([FromQuery] Guid? shopId = null)
         {
             try
@@ -34,8 +33,8 @@ namespace eCommerceApp.Host.Controllers
             }
         }
 
-        // GET: api/categories/{id}
-        [HttpGet("{id:guid}")]
+        
+        [HttpGet("get-single/{id:guid}")]
         public async Task<IActionResult> GetById(Guid id)
         {
             var data = await categoryService.GetByIdAsync(id);
@@ -47,8 +46,8 @@ namespace eCommerceApp.Host.Controllers
             return Ok(data);
         }
 
-        // POST: api/categories
-        [HttpPost]
+
+        [HttpPost("create")]
         public async Task<IActionResult> Add([FromBody] CreateCategory category)
         {
             if (!ModelState.IsValid)
@@ -60,8 +59,7 @@ namespace eCommerceApp.Host.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        // PUT: api/categories/{id}
-        [HttpPut("{id:guid}")]
+        [HttpPut("update/{id:guid}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCategory category)
         {
             if (id != category.Id)
@@ -73,8 +71,7 @@ namespace eCommerceApp.Host.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        // DELETE: api/categories/{id} (soft delete)
-        [HttpDelete("{id:guid}")]
+        [HttpDelete("delete/{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var result = await categoryService.DeleteAsync(id);
