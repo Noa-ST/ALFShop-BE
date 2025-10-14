@@ -16,7 +16,7 @@ namespace eCommerceApp.Host.Controllers
             return data.Any() ? Ok(data) : NotFound("No active shops found.");
         }
 
-        [HttpGet("get-by-seller/{sellerId}")]
+        [HttpGet("seller/{sellerId}")]
         public async Task<IActionResult> GetBySellerId(string sellerId)
         {
             var data = await shopService.GetBySellerIdAsync(sellerId);
@@ -40,8 +40,8 @@ namespace eCommerceApp.Host.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        [HttpPut("update")]
-        public async Task<IActionResult> Update([FromBody] UpdateShop dto)
+        [HttpPut("{id:guid}")]
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateShop dto)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);

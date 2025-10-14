@@ -2,13 +2,14 @@
 using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Identity;
 using eCommerceApp.Aplication.Services.Interfaces.Authentication;
-using eCommerceApp.Aplication.Services.Interfaces.Logging;
 using eCommerceApp.Aplication.Validations;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces.Authentication;
 using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Claims;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace eCommerceApp.Aplication.Services.Implementations.Authentication
 {
@@ -22,7 +23,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
         RoleManager<IdentityRole> roleManager
     ) : IAuthenticationService
     {
-        // Đăng ký tài khoản Customer hoặc Seller
+        // ... (Hàm CreateUser giữ nguyên)
         public async Task<ServiceResponse> CreateUser(CreateUser user)
         {
             var validation = await validationService.ValidateAsync(user, createUserValidator);
@@ -40,7 +41,6 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                 };
             }
 
-            // Xác định role (Admin seed sẵn, chỉ Customer hoặc Seller được tạo qua API)
             var roleToAssign = user.Role == "Seller" ? "Seller" : "Customer";
             if (!await roleManager.RoleExistsAsync(roleToAssign))
             {
@@ -62,21 +62,44 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
         {
             var validation = await validationService.ValidateAsync(user, loginUserValidator);
             if (!validation.Success)
-                return new LoginResponse(Message: validation.Message);
+                // Dùng Named Arguments cho tất cả 7 tham số
+                return new LoginResponse(
+                    Success: false,
+                    Message: validation.Message ?? "",
+                    Token: null!,
+                    RefreshToken: null!,
+                    Role: "",
+                    UserId: "",
+                    Fullname: "");
 
             var _user = await userManager.FindByEmailAsync(user.Email);
             if (_user == null)
-                return new LoginResponse(Message: "Email not found");
+                // Dùng Named Arguments cho tất cả 7 tham số
+                return new LoginResponse(
+                    Success: false,
+                    Message: "Email not found",
+                    Token: null!,
+                    RefreshToken: null!,
+                    Role: "",
+                    UserId: "",
+                    Fullname: "");
 
             var validPassword = await userManager.CheckPasswordAsync(_user, user.Password);
             if (!validPassword)
-                return new LoginResponse(Message: "Invalid credentials");
+                // Dùng Named Arguments cho tất cả 7 tham số
+                return new LoginResponse(
+                    Success: false,
+                    Message: "Invalid credentials",
+                    Token: null!,
+                    RefreshToken: null!,
+                    Role: "",
+                    UserId: "",
+                    Fullname: "");
 
-            // Claims
             var roles = await userManager.GetRolesAsync(_user);
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, _user.Id),
+                new Claim(ClaimTypes.NameIdentifier, _user.Id.ToString()),
                 new Claim(ClaimTypes.Email, _user.Email!),
                 new Claim("Fullname", _user.FullName ?? "")
             };
@@ -88,11 +111,32 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
             string jwtToken = tokenManagement.GenerateToken(claims);
             string refreshToken = tokenManagement.GetRefreshToken();
 
-            int saveTokenResult = await tokenManagement.AddRefreshToken(_user.Id, refreshToken);
+            int saveTokenResult = await tokenManagement.AddRefreshToken(_user.Id.ToString(), refreshToken);
 
+            var mainRole = roles.FirstOrDefault() ?? "Customer";
+
+            // Sử dụng Named Arguments cho tất cả 7 tham số trong mọi trường hợp trả về
             return saveTokenResult <= 0
-                ? new LoginResponse(Message: "Internal error occurred while authenticating")
-                : new LoginResponse(Success: true, Token: jwtToken, RefreshToken: refreshToken);
+                // Trường hợp lỗi lưu token
+                ? new LoginResponse(
+                    Success: false,
+                    Message: "Internal error occurred while authenticating",
+                    Token: jwtToken,
+                    RefreshToken: refreshToken,
+                    Role: mainRole,
+                    UserId: _user.Id,
+                    Fullname: _user.FullName ?? ""
+                )
+                // Trường hợp thành công
+                : new LoginResponse(
+                    Success: true,
+                    Message: "Login successful",
+                    Token: jwtToken,
+                    RefreshToken: refreshToken,
+                    Role: mainRole,
+                    UserId: _user.Id,
+                    Fullname: _user.FullName ?? ""
+                );
         }
 
         // Làm mới token
@@ -100,17 +144,31 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
         {
             bool validateTokenResult = await tokenManagement.ValidateRefreshToken(refreshToken);
             if (!validateTokenResult)
-                return new LoginResponse(Message: "Invalid token");
+                return new LoginResponse(
+                    Success: false,
+                    Message: "Invalid token",
+                    Token: null!,
+                    RefreshToken: null!,
+                    Role: "",
+                    UserId: "",
+                    Fullname: "");
 
-            string userId = await tokenManagement.GetUserIdByRefreshToken(refreshToken);
-            var user = await userManager.FindByIdAsync(userId);
+            string userIdString = await tokenManagement.GetUserIdByRefreshToken(refreshToken);
+            var user = await userManager.FindByIdAsync(userIdString);
             if (user == null)
-                return new LoginResponse(Message: "User not found");
+                return new LoginResponse(
+                    Success: false,
+                    Message: "User not found",
+                    Token: null!,
+                    RefreshToken: null!,
+                    Role: "",
+                    UserId: "",
+                    Fullname: "");
 
             var roles = await userManager.GetRolesAsync(user);
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Email, user.Email!),
                 new Claim("Fullname", user.FullName ?? "")
             };
@@ -122,9 +180,20 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
             string newJwtToken = tokenManagement.GenerateToken(claims);
             string newRefreshToken = tokenManagement.GetRefreshToken();
 
-            await tokenManagement.UpdateRefreshToken(userId, newRefreshToken);
+            await tokenManagement.UpdateRefreshToken(userIdString, newRefreshToken);
 
-            return new LoginResponse(Success: true, Token: newJwtToken, RefreshToken: newRefreshToken);
+            var mainRole = roles.FirstOrDefault() ?? "Customer";
+
+            // Trường hợp thành công
+            return new LoginResponse(
+                Success: true,
+                Message: "Token refreshed successfully",
+                Token: newJwtToken,
+                RefreshToken: newRefreshToken,
+                Role: mainRole,
+                UserId: user.Id,
+                Fullname: user.FullName ?? ""
+            );
         }
     }
 }

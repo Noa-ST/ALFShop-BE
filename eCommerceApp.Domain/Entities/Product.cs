@@ -18,6 +18,13 @@ namespace eCommerceApp.Domain.Entities
 
         public int StockQuantity { get; set; }
         public ProductStatus Status { get; set; } = ProductStatus.Pending;
+
+        // Điểm đánh giá trung bình
+        [Column(TypeName = "float")]
+        public float AverageRating { get; set; } = 0.0f;
+
+        // Tổng số lượt đánh giá
+        public int ReviewCount { get; set; } = 0;
         // Navigation
         [ForeignKey(nameof(ShopId))]
         public Shop? Shop { get; set; }

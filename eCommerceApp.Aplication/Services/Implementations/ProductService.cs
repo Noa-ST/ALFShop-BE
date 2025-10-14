@@ -114,7 +114,10 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
         public async Task<GetProductDetail?> GetDetailByIdAsync(Guid id)
         {
+            // Bước 1: Repository tải Entity Product kèm theo Shop và Images (đã bao gồm Rating)
             var entity = await productRepo.GetDetailByIdAsync(id);
+
+            // Bước 2: Dùng Mapper chuyển Entity sang DTO
             return entity == null || entity.IsDeleted
                 ? null
                 : mapper.Map<GetProductDetail>(entity);

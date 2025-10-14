@@ -7,18 +7,20 @@ namespace eCommerceApp.Domain.Entities
     public class Message
     {
         [Key]
-        public Guid MessageId { get; set; }
+        public Guid Id { get; set; }
 
-        public Guid ShopId { get; set; }
-        public string CustomerId { get; set; } = null!; // FK -> User.Id
+        public Guid ConversationId { get; set; } // FK -> Conversation
+        public string SenderId { get; set; } = null!; // FK -> User.Id (là Customer hoặc Seller)
 
         public string Content { get; set; } = null!;
-        public DateTime CreatedAt { get; set; }
+        public bool IsRead { get; set; } = false; // Trạng thái đã đọc/chưa đọc
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        [ForeignKey(nameof(ShopId))]
-        public Shop? Shop { get; set; }
+        // Navigation Properties
+        [ForeignKey(nameof(ConversationId))]
+        public Conversation? Conversation { get; set; }
 
-        [ForeignKey(nameof(CustomerId))]
-        public User? Customer { get; set; }
+        [ForeignKey(nameof(SenderId))]
+        public User? Sender { get; set; }
     }
 }

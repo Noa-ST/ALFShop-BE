@@ -24,7 +24,7 @@ namespace eCommerceApp.Host.Controllers
             return result.Success ? Ok(result) : BadRequest(result);
         }
 
-        [HttpGet("refresh Token/{refreshToken}")]
+        [HttpGet("refresh/{refreshToken}")]
         public async Task<IActionResult> ReviveToken(string refreshToken)
         {
             var result = await authenticationService.ReviveToken(refreshToken);

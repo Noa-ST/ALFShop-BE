@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using eCommerceApp.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using eCommerceApp.Infrastructure.Data;
 namespace eCommerceApp.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251010044247_UpdateShop")]
+    partial class UpdateShop
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -182,14 +185,6 @@ namespace eCommerceApp.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
-                    b.Property<string>("PhoneNumber")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("RecipientName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Street")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -282,41 +277,6 @@ namespace eCommerceApp.Infrastructure.Migrations
                     b.HasIndex("ShopId");
 
                     b.ToTable("Categories");
-                });
-
-            modelBuilder.Entity("eCommerceApp.Domain.Entities.Conversation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime>("LastMessageAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("User1Id")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("User2Id")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("User1Id");
-
-                    b.HasIndex("User2Id");
-
-                    b.ToTable("Conversations");
                 });
 
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Identity.RefreshToken", b =>
@@ -421,7 +381,7 @@ namespace eCommerceApp.Infrastructure.Migrations
 
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Message", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<Guid>("MessageId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
@@ -429,34 +389,21 @@ namespace eCommerceApp.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid>("ConversationId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("SenderId")
+                    b.Property<string>("CustomerId")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<Guid?>("ShopId")
+                    b.Property<Guid>("ShopId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("UserId")
-                        .HasColumnType("nvarchar(450)");
+                    b.HasKey("MessageId");
 
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConversationId");
-
-                    b.HasIndex("SenderId");
+                    b.HasIndex("CustomerId");
 
                     b.HasIndex("ShopId");
-
-                    b.HasIndex("UserId");
 
                     b.ToTable("Messages");
                 });
@@ -477,35 +424,14 @@ namespace eCommerceApp.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<decimal>("DiscountAmount")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
-
-                    b.Property<int>("PaymentMethod")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PaymentStatus")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PromotionCodeUsed")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("ShippingFee")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<Guid>("ShopId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("TrackingNumber")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -515,8 +441,6 @@ namespace eCommerceApp.Infrastructure.Migrations
                     b.HasIndex("AddressId");
 
                     b.HasIndex("CustomerId");
-
-                    b.HasIndex("ShopId");
 
                     b.ToTable("Orders");
                 });
@@ -583,9 +507,6 @@ namespace eCommerceApp.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<double>("AverageRating")
-                        .HasColumnType("float");
-
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uniqueidentifier");
 
@@ -604,9 +525,6 @@ namespace eCommerceApp.Infrastructure.Migrations
 
                     b.Property<decimal>("Price")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ReviewCount")
-                        .HasColumnType("int");
 
                     b.Property<Guid>("ShopId")
                         .HasColumnType("uniqueidentifier");
@@ -666,13 +584,10 @@ namespace eCommerceApp.Infrastructure.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<int>("CurrentUsageCount")
-                        .HasColumnType("int");
 
                     b.Property<decimal>("Discount")
                         .HasColumnType("decimal(18,2)");
@@ -680,17 +595,8 @@ namespace eCommerceApp.Infrastructure.Migrations
                     b.Property<DateTime>("EndDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
-
-                    b.Property<int>("MaxUsageCount")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("MinOrderAmount")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<Guid?>("ProductId")
                         .HasColumnType("uniqueidentifier");
@@ -705,9 +611,6 @@ namespace eCommerceApp.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
 
                     b.HasIndex("ProductId");
 
@@ -945,25 +848,6 @@ namespace eCommerceApp.Infrastructure.Migrations
                     b.Navigation("Shop");
                 });
 
-            modelBuilder.Entity("eCommerceApp.Domain.Entities.Conversation", b =>
-                {
-                    b.HasOne("eCommerceApp.Domain.Entities.Identity.User", "User1")
-                        .WithMany()
-                        .HasForeignKey("User1Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("eCommerceApp.Domain.Entities.Identity.User", "User2")
-                        .WithMany()
-                        .HasForeignKey("User2Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("User1");
-
-                    b.Navigation("User2");
-                });
-
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Identity.RefreshToken", b =>
                 {
                     b.HasOne("eCommerceApp.Domain.Entities.Identity.User", "User")
@@ -977,29 +861,21 @@ namespace eCommerceApp.Infrastructure.Migrations
 
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Message", b =>
                 {
-                    b.HasOne("eCommerceApp.Domain.Entities.Conversation", "Conversation")
+                    b.HasOne("eCommerceApp.Domain.Entities.Identity.User", "Customer")
                         .WithMany("Messages")
-                        .HasForeignKey("ConversationId")
+                        .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("eCommerceApp.Domain.Entities.Identity.User", "Sender")
-                        .WithMany()
-                        .HasForeignKey("SenderId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                    b.HasOne("eCommerceApp.Domain.Entities.Shop", "Shop")
+                        .WithMany("Messages")
+                        .HasForeignKey("ShopId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("eCommerceApp.Domain.Entities.Shop", null)
-                        .WithMany("Messages")
-                        .HasForeignKey("ShopId");
+                    b.Navigation("Customer");
 
-                    b.HasOne("eCommerceApp.Domain.Entities.Identity.User", null)
-                        .WithMany("Messages")
-                        .HasForeignKey("UserId");
-
-                    b.Navigation("Conversation");
-
-                    b.Navigation("Sender");
+                    b.Navigation("Shop");
                 });
 
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Order", b =>
@@ -1016,17 +892,9 @@ namespace eCommerceApp.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("eCommerceApp.Domain.Entities.Shop", "Shop")
-                        .WithMany()
-                        .HasForeignKey("ShopId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.Navigation("Customer");
 
                     b.Navigation("ShippingAddress");
-
-                    b.Navigation("Shop");
                 });
 
             modelBuilder.Entity("eCommerceApp.Domain.Entities.OrderItem", b =>
@@ -1051,7 +919,7 @@ namespace eCommerceApp.Infrastructure.Migrations
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Payment", b =>
                 {
                     b.HasOne("eCommerceApp.Domain.Entities.Order", "Order")
-                        .WithOne()
+                        .WithOne("Payment")
                         .HasForeignKey("eCommerceApp.Domain.Entities.Payment", "OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1170,11 +1038,6 @@ namespace eCommerceApp.Infrastructure.Migrations
                     b.Navigation("Products");
                 });
 
-            modelBuilder.Entity("eCommerceApp.Domain.Entities.Conversation", b =>
-                {
-                    b.Navigation("Messages");
-                });
-
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Identity.User", b =>
                 {
                     b.Navigation("Addresses");
@@ -1197,6 +1060,8 @@ namespace eCommerceApp.Infrastructure.Migrations
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Order", b =>
                 {
                     b.Navigation("Items");
+
+                    b.Navigation("Payment");
                 });
 
             modelBuilder.Entity("eCommerceApp.Domain.Entities.Product", b =>

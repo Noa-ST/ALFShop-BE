@@ -14,6 +14,12 @@ namespace eCommerceApp.Domain.Entities
 
         public string? Description { get; set; }
         public string? Logo { get; set; }
+        // Dùng float để phù hợp với DTO và việc tính điểm trung bình
+        [Range(0.0, 5.0)]
+        public float AverageRating { get; set; } = 0.0f;
+
+        // Số lượng đánh giá (cần thiết cho độ tin cậy của Rating)
+        public int ReviewCount { get; set; } = 0;
 
         // Navigation
         [ForeignKey(nameof(SellerId))]

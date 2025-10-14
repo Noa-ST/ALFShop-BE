@@ -1,18 +1,20 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore;
 using eCommerceApp.Domain.Entities;
-using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using eCommerceApp.Domain.Entities.Identity;
 
 namespace eCommerceApp.Infrastructure.Data
 {
+    // Kế thừa IdentityDbContext với User và IdentityRole
     public class AppDbContext : IdentityDbContext<User, IdentityRole, string>
     {
         public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options) { }
 
+        // Bổ sung DbSet cho Entity mới: Conversation
         public DbSet<Shop> Shops { get; set; } = null!;
         public DbSet<Category> Categories { get; set; } = null!;
         public DbSet<Product> Products { get; set; } = null!;
@@ -25,6 +27,7 @@ namespace eCommerceApp.Infrastructure.Data
         public DbSet<OrderItem> OrderItems { get; set; } = null!;
         public DbSet<Payment> Payments { get; set; } = null!;
         public DbSet<Review> Reviews { get; set; } = null!;
+        public DbSet<Conversation> Conversations { get; set; } = null!; // ✅ Đã sửa
         public DbSet<Message> Messages { get; set; } = null!;
         public DbSet<ViolationReport> ViolationReports { get; set; } = null!;
         public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
@@ -48,12 +51,31 @@ namespace eCommerceApp.Infrastructure.Data
                 .Property(p => p.Price)
                 .HasColumnType("decimal(18,2)");
 
+            // Độ chính xác cho thuộc tính mới trong Product
+            modelBuilder.Entity<Product>()
+                .Property(p => p.AverageRating)
+                .HasColumnType("float");
+
             modelBuilder.Entity<Promotion>()
                 .Property(p => p.Discount)
                 .HasColumnType("decimal(18,2)");
 
+            // Độ chính xác cho thuộc tính mới trong Promotion
+            modelBuilder.Entity<Promotion>()
+                .Property(p => p.MinOrderAmount)
+                .HasColumnType("decimal(18,2)");
+
             modelBuilder.Entity<Order>()
                 .Property(o => o.TotalAmount)
+                .HasColumnType("decimal(18,2)");
+
+            // Độ chính xác cho thuộc tính mới trong Order
+            modelBuilder.Entity<Order>()
+                .Property(o => o.ShippingFee)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<Order>()
+                .Property(o => o.DiscountAmount)
                 .HasColumnType("decimal(18,2)");
 
             modelBuilder.Entity<OrderItem>()
@@ -147,9 +169,17 @@ namespace eCommerceApp.Infrastructure.Data
             // Order - Payment (1:1)
             modelBuilder.Entity<Payment>()
                 .HasOne(p => p.Order)
-                .WithOne(o => o.Payment)
+                // ❌ SỬA LỖI CS1061: Thay thế .WithOne(o => o.Payment) bằng .WithOne() vì Order không còn Navigation Property
+                .WithOne()
                 .HasForeignKey<Payment>(p => p.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Order - Shop (Bổ sung cho Multi-shop Order)
+            modelBuilder.Entity<Order>()
+                .HasOne(o => o.Shop)
+                .WithMany()
+                .HasForeignKey(o => o.ShopId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Review -> Product / User
             modelBuilder.Entity<Review>()
@@ -164,18 +194,33 @@ namespace eCommerceApp.Infrastructure.Data
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Message -> Shop / Customer
+            // ---------- Mối quan hệ Chat mới (Giai đoạn 8) ----------
+            // Conversation
+            modelBuilder.Entity<Conversation>()
+                .HasOne(c => c.User1)
+                .WithMany()
+                .HasForeignKey(c => c.User1Id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Conversation>()
+                .HasOne(c => c.User2)
+                .WithMany()
+                .HasForeignKey(c => c.User2Id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Message -> Conversation / Sender
             modelBuilder.Entity<Message>()
-                .HasOne(m => m.Shop)
-                .WithMany(s => s.Messages)
-                .HasForeignKey(m => m.ShopId)
+                .HasOne(m => m.Conversation)
+                .WithMany(c => c.Messages)
+                .HasForeignKey(m => m.ConversationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Message>()
-                .HasOne(m => m.Customer)
-                .WithMany(u => u.Messages)
-                .HasForeignKey(m => m.CustomerId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .HasOne(m => m.Sender)
+                .WithMany()
+                .HasForeignKey(m => m.SenderId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // --------------------------------------------------------
 
             // ViolationReport -> Product / Reporter / Admin
             modelBuilder.Entity<ViolationReport>()
@@ -211,6 +256,7 @@ namespace eCommerceApp.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Order -> Address / Customer
+            // ❌ SỬA LỖI CS0103: Sửa 'modelModelBuilder' thành 'modelBuilder'
             modelBuilder.Entity<Order>()
                 .HasOne(o => o.ShippingAddress)
                 .WithMany()
@@ -224,7 +270,6 @@ namespace eCommerceApp.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Cascade);
 
             // ---------- Global Query Filters (soft-delete) ----------
-            // Entities that have IsDeleted property in your diagram:
             modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
             modelBuilder.Entity<Shop>().HasQueryFilter(s => !s.IsDeleted);
             modelBuilder.Entity<Category>().HasQueryFilter(c => !c.IsDeleted);
@@ -232,15 +277,20 @@ namespace eCommerceApp.Infrastructure.Data
             modelBuilder.Entity<Promotion>().HasQueryFilter(p => !p.IsDeleted);
             modelBuilder.Entity<Address>().HasQueryFilter(a => !a.IsDeleted);
             modelBuilder.Entity<Order>().HasQueryFilter(o => !o.IsDeleted);
+            modelBuilder.Entity<Conversation>().HasQueryFilter(c => !c.IsDeleted);
 
             // ---------- Indexes (optional helpful ones) ----------
             modelBuilder.Entity<User>()
                 .HasIndex(u => u.NormalizedUserName)
-                .IsUnique(false); // if using Identity, might be unique; adapt to your needs
+                .IsUnique(false);
 
             modelBuilder.Entity<User>()
                 .HasIndex(u => u.NormalizedEmail)
                 .IsUnique(false);
+
+            modelBuilder.Entity<Promotion>()
+                .HasIndex(p => p.Code)
+                .IsUnique();
         }
     }
 }
