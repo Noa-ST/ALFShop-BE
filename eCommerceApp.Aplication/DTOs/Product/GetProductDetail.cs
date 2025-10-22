@@ -1,7 +1,4 @@
-﻿using eCommerceApp.Aplication.DTOs.Shop;
-using eCommerceApp.Aplication.DTOs.Category;
-
-namespace eCommerceApp.Aplication.DTOs.Product
+﻿namespace eCommerceApp.Aplication.DTOs.Product
 {
     public class GetProductDetail : GetProduct
     {

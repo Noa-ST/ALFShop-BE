@@ -1,6 +1,7 @@
 ﻿using eCommerceApp.Aplication.DTOs.Identity;
 using eCommerceApp.Aplication.Services.Interfaces.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
 
 namespace eCommerceApp.Host.Controllers
 {
@@ -13,7 +14,7 @@ namespace eCommerceApp.Host.Controllers
         {
             var result = await authenticationService.CreateUser(user);
 
-            return result.Success ? Ok(result) : BadRequest(result);
+            return result.Succeeded ? Ok(result) : BadRequest(result);
         }
 
         [HttpPost("login")]

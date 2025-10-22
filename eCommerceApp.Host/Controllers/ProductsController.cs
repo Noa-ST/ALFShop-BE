@@ -27,7 +27,7 @@ namespace eCommerceApp.Host.Controllers
         [HttpGet("getbycategory/{categoryId:guid}")]
         public async Task<IActionResult> GetByCategoryId(Guid categoryId)
         {
-            var data = await productService.GetByCategoryIdAsync(categoryId);
+            var data = await productService.GetByGlobalCategoryIdAsync(categoryId);
             return data.Any() ? Ok(data) : NotFound(new { message = "No products found in this category." });
         }
 
@@ -45,7 +45,7 @@ namespace eCommerceApp.Host.Controllers
                 return BadRequest(ModelState);
 
             var result = await productService.AddAsync(dto);
-            return result.Success
+            return result.Succeeded
                 ? Ok(new { message = result.Message })
                 : BadRequest(new { message = result.Message });
         }
@@ -56,8 +56,8 @@ namespace eCommerceApp.Host.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var result = await productService.UpdateAsync(id, dto); 
-            return result.Success ? Ok(result) : BadRequest(result);
+            var result = await productService.UpdateAsync(id, dto);
+            return result.Succeeded ? Ok(result) : BadRequest(result);
         }
 
 
@@ -65,7 +65,7 @@ namespace eCommerceApp.Host.Controllers
         public async Task<IActionResult> Delete(Guid id)
         {
             var result = await productService.DeleteAsync(id);
-            return result.Success
+            return result.Succeeded
                 ? Ok(new { message = result.Message })
                 : BadRequest(new { message = result.Message });
         }

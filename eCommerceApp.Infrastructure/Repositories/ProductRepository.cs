@@ -14,13 +14,14 @@ namespace eCommerceApp.Infrastructure.Repositories
             _context = context;
         }
 
-        // ✅ Load toàn bộ Product kèm Shop, Category, Images (dành cho trang chủ hoặc admin)
+        // ✅ Load toàn bộ Product kèm Shop, GlobalCategory, Images (dành cho trang chủ hoặc admin)
         public new async Task<IEnumerable<Product>> GetAllAsync()
         {
             return await _context.Products
                 .Include(p => p.Shop)
-                .Include(p => p.Category)
-                .Include(p => p.Images)
+                // ✅ SỬA: Category cũ -> GlobalCategory mới
+                .Include(p => p.GlobalCategory)
+                .Include(p => p.Images) // Đổi từ Images sang ProductImages (theo Entity Product.cs)
                 .Where(p => !p.IsDeleted)
                 .AsNoTracking()
                 .ToListAsync();
@@ -30,20 +31,22 @@ namespace eCommerceApp.Infrastructure.Repositories
         public async Task<IEnumerable<Product>> GetByShopIdAsync(Guid shopId)
         {
             return await _context.Products
-                .Include(p => p.Category)
-                .Include(p => p.Images)
+                // ✅ SỬA: Category cũ -> GlobalCategory mới
+                .Include(p => p.GlobalCategory)
+                .Include(p => p.Images) // Đổi từ Images sang ProductImages
                 .Where(p => p.ShopId == shopId && !p.IsDeleted)
                 .AsNoTracking()
                 .ToListAsync();
         }
 
-        // ✅ Lấy theo Category (hiển thị danh mục)
-        public async Task<IEnumerable<Product>> GetByCategoryIdAsync(Guid categoryId)
+        // ✅ Lấy theo Global Category (hiển thị danh mục công khai)
+        public async Task<IEnumerable<Product>> GetByGlobalCategoryIdAsync(Guid globalCategoryId) // ✅ SỬA TÊN PHƯƠNG THỨC
         {
             return await _context.Products
                 .Include(p => p.Shop)
-                .Include(p => p.Images)
-                .Where(p => p.CategoryId == categoryId && !p.IsDeleted)
+                .Include(p => p.Images) // Đổi từ Images sang ProductImages
+                                               // ✅ SỬA: p.CategoryId cũ -> p.GlobalCategoryId mới
+                .Where(p => p.GlobalCategoryId == globalCategoryId && !p.IsDeleted)
                 .AsNoTracking()
                 .ToListAsync();
         }
@@ -53,12 +56,13 @@ namespace eCommerceApp.Infrastructure.Repositories
         {
             return await _context.Products
                 .Include(p => p.Shop)
-                .Include(p => p.Category)
-                .Include(p => p.Images)
+                // ✅ SỬA: Category cũ -> GlobalCategory mới
+                .Include(p => p.GlobalCategory)
+                .Include(p => p.Images) // Đổi từ Images sang ProductImages
                 .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted);
         }
 
-        // ✅ Soft Delete (đánh dấu xoá)
+        // ✅ Soft Delete (đánh dấu xoá) - Giữ nguyên
         public async Task<int> SoftDeleteAsync(Guid id)
         {
             var product = await _context.Products.FindAsync(id);
@@ -71,6 +75,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             return await _context.SaveChangesAsync();
         }
 
+        // ✅ AddWithImagesAsync - Giữ nguyên
         public async Task<int> AddWithImagesAsync(Product product, IEnumerable<ProductImage>? images)
         {
             // Dùng ExecutionStrategy để hỗ trợ retry (chống lỗi InvalidOperationException)
@@ -97,6 +102,5 @@ namespace eCommerceApp.Infrastructure.Repositories
                 }
             });
         }
-
     }
 }

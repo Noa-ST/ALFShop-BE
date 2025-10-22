@@ -7,7 +7,7 @@ namespace eCommerceApp.Aplication.Services.Interfaces
     {
         Task<IEnumerable<GetProduct>> GetAllAsync();
         Task<IEnumerable<GetProduct>> GetByShopIdAsync(Guid shopId);
-        Task<IEnumerable<GetProduct>> GetByCategoryIdAsync(Guid categoryId);
+        Task<IEnumerable<GetProduct>> GetByGlobalCategoryIdAsync(Guid globalCategoryId);
         Task<GetProductDetail?> GetDetailByIdAsync(Guid id);
         Task<ServiceResponse> AddAsync(CreateProduct product);
         Task<ServiceResponse> UpdateAsync(Guid id, UpdateProduct product);

@@ -1,11 +1,13 @@
 ﻿using AutoMapper;
-using eCommerceApp.Aplication.DTOs.Category;
 using eCommerceApp.Aplication.DTOs.Identity;
 using eCommerceApp.Aplication.DTOs.Product;
 using eCommerceApp.Aplication.DTOs.Shop;
+using eCommerceApp.Aplication.DTOs.GlobalCategory; // ✅ Thêm Global Category DTO
+using eCommerceApp.Aplication.DTOs.ShopCategory; // ✅ Thêm Shop Category DTO
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Enums;
+using System.Collections.Generic; // Cần thiết cho List/IEnumerable
 
 namespace eCommerceApp.Aplication.Mapping
 {
@@ -13,15 +15,32 @@ namespace eCommerceApp.Aplication.Mapping
     {
         public MappingConfig()
         {
-            // --- Category ---
-            CreateMap<CreateCategory, Category>()
-              .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(src => false))
-              .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
-            CreateMap<UpdateCategory, Category>()
+            // --- GLOBAL CATEGORY (Thay thế Category cũ) ---
+
+            // 💡 [SỬA ĐỔI]: Category cũ đã bị xóa. Thay bằng GlobalCategory.
+            CreateMap<CreateGlobalCategory, GlobalCategory>()
+                .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(src => false))
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
+                .ReverseMap();
+
+            CreateMap<UpdateGlobalCategory, GlobalCategory>()
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
-            CreateMap<Category, GetCategory>()
-            .ForMember(dest => dest.ShopName, opt => opt.MapFrom(src => src.Shop != null ? src.Shop.Name : null))
-            .ReverseMap();
+
+            CreateMap<GlobalCategory, GetGlobalCategory>()
+                .ForMember(dest => dest.ParentId, opt => opt.MapFrom(src => src.ParentId))
+                .ForMember(dest => dest.Parent, opt => opt.MapFrom(src => src.Parent))
+                .ReverseMap();
+
+            // --- SHOP CATEGORY (Danh mục của Seller) ---
+            CreateMap<CreateShopCategory, ShopCategory>()
+                .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(src => false))
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
+
+            CreateMap<UpdateShopCategory, ShopCategory>()
+                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
+
+            CreateMap<ShopCategory, GetShopCategory>()
+                .ReverseMap();
 
 
             // --- User ---
@@ -46,7 +65,7 @@ namespace eCommerceApp.Aplication.Mapping
                     opt => opt.MapFrom(src => src.Seller != null ? src.Seller.FullName : null))
                 .ReverseMap();
 
-            // ✅ Ánh xạ Shop -> ShopForProductDetail (Rút gọn)
+            // Ánh xạ Shop -> ShopForProductDetail (Rút gọn)
             CreateMap<Shop, ShopForProductDetail>()
                 .ForMember(dest => dest.LogoUrl, opt => opt.MapFrom(src => src.Logo))
                 .ForMember(dest => dest.Rating, opt => opt.MapFrom(src => src.AverageRating));
@@ -62,6 +81,7 @@ namespace eCommerceApp.Aplication.Mapping
                 .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(_ => false))
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(_ => ProductStatus.Pending))
+                // ✅ [SỬA]: Product Entity dùng ProductImages (Navigation Property)
                 .ForMember(dest => dest.Images, opt => opt.MapFrom(src =>
                     src.ImageUrls != null
                         ? src.ImageUrls.Select(url => new ProductImage
@@ -74,31 +94,31 @@ namespace eCommerceApp.Aplication.Mapping
 
             CreateMap<UpdateProduct, Product>()
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
-                .ForMember(dest => dest.Images, opt => opt.Ignore()) // xử lý riêng ảnh trong service
+                .ForMember(dest => dest.Images, opt => opt.Ignore())
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src =>
                     src.Status.HasValue ? src.Status.Value : ProductStatus.Pending));
 
             // ✅ Cập nhật: Product → GetProduct
             CreateMap<Product, GetProduct>()
                 .ForMember(dest => dest.ShopName, opt => opt.MapFrom(src => src.Shop != null ? src.Shop.Name : null))
-                .ForMember(dest => dest.CategoryName, opt => opt.MapFrom(src => src.Category != null ? src.Category.Name : null))
+                .ForMember(dest => dest.CategoryName, opt => opt.MapFrom(src => src.GlobalCategory != null ? src.GlobalCategory.Name : null))
 
                 // Ánh xạ Shop lồng nhau
                 .ForMember(dest => dest.Shop, opt => opt.MapFrom(src => src.Shop))
 
-                // ✅ Ánh xạ ProductImages (Đã sửa để dùng List<ProductImage> rỗng khi không có ảnh)
+                // Ánh xạ ProductImages
                 .ForMember(dest => dest.ProductImages, opt => opt.MapFrom(src =>
-                    src.Images != null
+                    src.Images != null 
                         ? src.Images.Where(i => !i.IsDeleted)
-                        : new List<ProductImage>()
-                )); // <-- Lỗi CS1061 đã được khắc phục bằng cách XÓA dòng ImageUrls bên dưới
+                        : new List<ProductImage>()));
 
             // Product → GetProductDetail (mở rộng từ GetProduct)
             CreateMap<Product, GetProductDetail>()
                 .IncludeBase<Product, GetProduct>()
                 .ForMember(dest => dest.ShopDescription, opt => opt.MapFrom(src => src.Shop != null ? src.Shop.Description : null))
                 .ForMember(dest => dest.ShopLogo, opt => opt.MapFrom(src => src.Shop != null ? src.Shop.Logo : null))
-                .ForMember(dest => dest.CategoryDescription, opt => opt.MapFrom(src => src.Category != null ? src.Category.Description : null));
+                // ✅ [SỬA]: CategoryDescription cũ -> GlobalCategory.Description mới
+                .ForMember(dest => dest.CategoryDescription, opt => opt.MapFrom(src => src.GlobalCategory != null ? src.GlobalCategory.Description : null));
         }
     }
 }

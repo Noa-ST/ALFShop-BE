@@ -40,12 +40,6 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
                 }),
                 ServiceLifetime.Scoped);
 
-            //2. Generic Repositories 
-            // Đăng ký Repository (theo pattern Generic Repository)
-            services.AddScoped<IGeneric<Product>, GenericRepository<Product>>();
-            services.AddScoped<IGeneric<Category>, GenericRepository<Category>>();
-            services.AddScoped<IGeneric<Shop>, GenericRepository<Shop>>();
-
 
             // 3. Logging Adapter
             // Dùng Serilog làm logger cho toàn bộ app (thay vì ILogger mặc định)
@@ -76,31 +70,35 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
                 options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
             })
-            .AddJwtBearer(options =>
-            {
-                options.SaveToken = true;
-                options.TokenValidationParameters = new TokenValidationParameters()
-                {
-                    ValidateAudience = true,
-                    ValidateIssuer = true,
-                    ValidateLifetime = true,
-                    RequireExpirationTime = true,
-                    ValidateIssuerSigningKey = true,
-                    // Đọc config JWT từ appsettings.json
-                    ValidIssuer = config["JWT:Issuer"],
-                    ValidAudience = config["JWT:Audience"],
-                    ClockSkew = TimeSpan.Zero, // không delay thời gian hết hạn
-                    IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(config["JWT:Key"]!)
-                    )
-                };
-            });
+          .AddJwtBearer(options =>
+          {
+              options.SaveToken = true;
+              options.TokenValidationParameters = new TokenValidationParameters()
+              {
+     
+                  ValidateAudience = true,
+                  ValidateIssuer = true,
+                  ValidateLifetime = true,
+                  RequireExpirationTime = true,
+                  ValidateIssuerSigningKey = true,
+                  RoleClaimType = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+                  NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
+
+                  ValidIssuer = config["JWT:Issuer"],
+                  ValidAudience = config["JWT:Audience"],
+                  ClockSkew = TimeSpan.Zero,
+                  IssuerSigningKey = new SymmetricSecurityKey(
+                      Encoding.UTF8.GetBytes(config["JWT:Key"]!)
+                  )
+              };
+          });
 
             // 6. Custom Authentication Services            
             services.AddScoped<IUserManagement, UserManagement>();
             services.AddScoped<ITokenManagement, TokenManagement>();
             services.AddScoped<IRoleManagement, RoleManagement>();
-            services.AddScoped<ICategoryRepository, CategoryRepository>();
+            services.AddScoped<IGlobalCategoryRepository, GlobalCategoryRepository>();
+            services.AddScoped<IShopCategoryRepository, ShopCategoryRepository>();
             services.AddScoped<IShopRepository, ShopRepository>();
             services.AddScoped<IProductRepository, ProductRepository>();
             services.AddScoped<IProductImageRepository, ProductImageRepository>();

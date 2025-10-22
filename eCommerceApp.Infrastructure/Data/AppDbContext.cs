@@ -16,7 +16,8 @@ namespace eCommerceApp.Infrastructure.Data
 
         // Bổ sung DbSet cho Entity mới: Conversation
         public DbSet<Shop> Shops { get; set; } = null!;
-        public DbSet<Category> Categories { get; set; } = null!;
+        public DbSet<GlobalCategory> GlobalCategoris { get; set; } = null!;
+        public DbSet<ShopCategory> ShopCategories { get; set; }
         public DbSet<Product> Products { get; set; } = null!;
         public DbSet<ProductImage> ProductImages { get; set; } = null!;
         public DbSet<Promotion> Promotions { get; set; } = null!;
@@ -108,11 +109,23 @@ namespace eCommerceApp.Infrastructure.Data
 
             // Category - Product
             modelBuilder.Entity<Product>()
-                .HasOne(p => p.Category)
+                .HasOne(p => p.GlobalCategory)
                 .WithMany(c => c.Products)
-                .HasForeignKey(p => p.CategoryId)
+                .HasForeignKey(p => p.GlobalCategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<ShopCategory>()
+                .HasOne(sc => sc.Shop)
+                .WithMany() 
+                .HasForeignKey(sc => sc.ShopId)
+                .OnDelete(DeleteBehavior.Cascade); 
+
+            modelBuilder.Entity<ShopCategory>()
+                .HasOne(c => c.Parent)
+                .WithMany(c => c.Children)
+                .HasForeignKey(c => c.ParentId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
             // Product - ProductImage
             modelBuilder.Entity<ProductImage>()
                 .HasOne(pi => pi.Product)
@@ -272,7 +285,8 @@ namespace eCommerceApp.Infrastructure.Data
             // ---------- Global Query Filters (soft-delete) ----------
             modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
             modelBuilder.Entity<Shop>().HasQueryFilter(s => !s.IsDeleted);
-            modelBuilder.Entity<Category>().HasQueryFilter(c => !c.IsDeleted);
+            modelBuilder.Entity<GlobalCategory>().HasQueryFilter(c => !c.IsDeleted);
+            modelBuilder.Entity<ShopCategory>().HasQueryFilter(c => !c.IsDeleted);
             modelBuilder.Entity<Product>().HasQueryFilter(p => !p.IsDeleted);
             modelBuilder.Entity<Promotion>().HasQueryFilter(p => !p.IsDeleted);
             modelBuilder.Entity<Address>().HasQueryFilter(a => !a.IsDeleted);

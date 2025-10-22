@@ -1,8 +1,8 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace eCommerceApp.Aplication.DTOs.Category
+namespace eCommerceApp.Aplication.DTOs.GlobalCategory
 {
-    public class UpdateCategory : CategoryBase
+    public class UpdateGlobalCategory : GlobalCategoryBase
     {
         [Required ]
         public Guid Id { get; set; }

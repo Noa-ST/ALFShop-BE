@@ -37,7 +37,7 @@ namespace eCommerceApp.Host.Controllers
                 return BadRequest(ModelState);
 
             var result = await shopService.CreateAsync(dto);
-            return result.Success ? Ok(result) : BadRequest(result);
+            return result.Succeeded ? Ok(result) : BadRequest(result);
         }
 
         [HttpPut("{id:guid}")]
@@ -47,14 +47,14 @@ namespace eCommerceApp.Host.Controllers
                 return BadRequest(ModelState);
 
             var result = await shopService.UpdateAsync(dto);
-            return result.Success ? Ok(result) : BadRequest(result);
+            return result.Succeeded ? Ok(result) : BadRequest(result);
         }
 
         [HttpDelete("delete/{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var result = await shopService.DeleteAsync(id);
-            return result.Success ? Ok(result) : BadRequest(result);
+            return result.Succeeded ? Ok(result) : BadRequest(result);
         }
     }
 }

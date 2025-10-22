@@ -27,7 +27,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
         public async Task<ServiceResponse> CreateUser(CreateUser user)
         {
             var validation = await validationService.ValidateAsync(user, createUserValidator);
-            if (!validation.Success) return validation;
+            if (!validation.Succeeded) return validation;
 
             var mappedModel = mapper.Map<User>(user);
             mappedModel.UserName = user.Email;
@@ -54,14 +54,14 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                 return new ServiceResponse { Message = "Error occurred while assigning role" };
             }
 
-            return new ServiceResponse { Success = true, Message = "Account created!" };
+            return new ServiceResponse { Succeeded = true, Message = "Account created!" };
         }
 
         // Đăng nhập
         public async Task<LoginResponse> LoginUser(LoginUser user)
         {
             var validation = await validationService.ValidateAsync(user, loginUserValidator);
-            if (!validation.Success)
+            if (!validation.Succeeded)
                 // Dùng Named Arguments cho tất cả 7 tham số
                 return new LoginResponse(
                     Success: false,

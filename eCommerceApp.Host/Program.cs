@@ -1,5 +1,6 @@
 ﻿using eCommerceApp.Aplication.DependencyInjection;
 using eCommerceApp.Infrastructure.DependencyInjection;
+using Microsoft.OpenApi.Models;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,8 +23,38 @@ builder.Services.AddControllers();
 
 // ---- Swagger ----
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
+
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "AIFShop API", Version = "v1" });
+
+    // ✅ BỔ SUNG CẤU HÌNH JWT SECURITY
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Nhập 'Bearer ' theo sau là token JWT (Ví dụ: Bearer asd12345...)"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+});
 // ---- CORS ----
 builder.Services.AddCors(opt =>
 {
@@ -31,8 +62,6 @@ builder.Services.AddCors(opt =>
     {
         policy.AllowAnyHeader()
               .AllowAnyMethod()
-              // ✅ Thay thế bằng địa chỉ của Frontend (React/Vite chạy trên cổng 5173)
-              // Cần thêm cả HTTP và HTTPS để linh hoạt trong môi trường dev
               .WithOrigins("http://localhost:5173", "https://localhost:5173")
               .AllowCredentials();
     });

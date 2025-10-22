@@ -7,7 +7,6 @@ namespace eCommerceApp.Domain.Entities
     public class Product : AuditableEntity
     {
         public Guid ShopId { get; set; }
-        public Guid CategoryId { get; set; }
 
         [Required]
         public string Name { get; set; } = null!;
@@ -29,8 +28,8 @@ namespace eCommerceApp.Domain.Entities
         [ForeignKey(nameof(ShopId))]
         public Shop? Shop { get; set; }
 
-        [ForeignKey(nameof(CategoryId))]
-        public Category? Category { get; set; }
+        public Guid GlobalCategoryId { get; set; }
+        public GlobalCategory GlobalCategory { get; set; } = null!;
 
         public ICollection<ProductImage>? Images { get; set; }
         public ICollection<OrderItem>? OrderItems { get; set; }

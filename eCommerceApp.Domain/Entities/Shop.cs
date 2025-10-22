@@ -26,7 +26,7 @@ namespace eCommerceApp.Domain.Entities
         public User? Seller { get; set; }
 
         public ICollection<Product>? Products { get; set; }
-        public ICollection<Category>? Categories { get; set; }
+        public ICollection<ShopCategory>? ShopCategories { get; set; }
         public ICollection<Promotion>? Promotions { get; set; }
         public ICollection<Message>? Messages { get; set; }
     }

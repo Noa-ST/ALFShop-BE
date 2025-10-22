@@ -21,7 +21,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             entity.IsDeleted = false;
 
             // 🔧 Đảm bảo không bị nhân đôi ảnh (xoá bộ ảnh mà AutoMapper đã map sẵn)
-            entity.Images?.Clear();
+            entity.Images?.Clear(); // ✅ Sửa Images thành ProductImages (nếu entity dùng tên này)
 
             // ✅ Thêm ảnh vào entity trực tiếp
             if (product.ImageUrls != null && product.ImageUrls.Any())
@@ -29,7 +29,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 entity.Images = product.ImageUrls.Select(url => new ProductImage
                 {
                     Id = Guid.NewGuid(),
-                    ProductId = entity.Id,
+                    // ProductId sẽ được EF Core tự động gán sau khi AddAsync
                     Url = url,
                     CreatedAt = DateTime.UtcNow,
                     IsDeleted = false
@@ -59,12 +59,14 @@ namespace eCommerceApp.Aplication.Services.Implementations
             // Cập nhật ảnh nếu có
             if (product.ImageUrls != null && product.ImageUrls.Any())
             {
-                if (existing.Images != null)
+                if (existing.Images != null) 
                 {
-                    foreach (var old in existing.Images)
+                    // Xóa các ảnh cũ
+                    foreach (var old in existing.Images) 
                         await productImageRepo.DeleteAsync(old.Id);
                 }
 
+                // Thêm các ảnh mới
                 foreach (var url in product.ImageUrls)
                 {
                     var img = new ProductImage
@@ -106,15 +108,17 @@ namespace eCommerceApp.Aplication.Services.Implementations
             return mapper.Map<IEnumerable<GetProduct>>(data);
         }
 
-        public async Task<IEnumerable<GetProduct>> GetByCategoryIdAsync(Guid categoryId)
+        // ✅ [ĐÃ SỬA]: Triển khai phương thức mới GetByGlobalCategoryIdAsync
+        public async Task<IEnumerable<GetProduct>> GetByGlobalCategoryIdAsync(Guid globalCategoryId)
         {
-            var data = await productRepo.GetByCategoryIdAsync(categoryId);
+            // Gọi phương thức mới trong Repository
+            var data = await productRepo.GetByGlobalCategoryIdAsync(globalCategoryId);
             return mapper.Map<IEnumerable<GetProduct>>(data);
         }
 
         public async Task<GetProductDetail?> GetDetailByIdAsync(Guid id)
         {
-            // Bước 1: Repository tải Entity Product kèm theo Shop và Images (đã bao gồm Rating)
+            // Bước 1: Repository tải Entity Product kèm theo Shop và Images
             var entity = await productRepo.GetDetailByIdAsync(id);
 
             // Bước 2: Dùng Mapper chuyển Entity sang DTO

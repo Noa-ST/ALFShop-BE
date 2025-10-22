@@ -1,4 +1,5 @@
-﻿using eCommerceApp.Domain.Interfaces;
+﻿using eCommerceApp.Domain.Entities;
+using eCommerceApp.Domain.Interfaces;
 using eCommerceApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,7 +10,8 @@ namespace eCommerceApp.Infrastructure.Repositories
     /// Cung cấp CRUD cơ bản để tái sử dụng, tránh lặp code.
     /// </summary>
     /// <typeparam name="TEntity">Entity mà repository thao tác</typeparam>
-    public class GenericRepository<TEntity>(AppDbContext context) : IGeneric<TEntity> where TEntity : class
+    public abstract class GenericRepository<TEntity>(AppDbContext context) : IGeneric<TEntity> where TEntity : AuditableEntity
+
     {
         /// <summary>
         /// Thêm một entity mới vào database.
@@ -35,20 +37,21 @@ namespace eCommerceApp.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Lấy tất cả entity (không tracking để tăng performance khi chỉ đọc).
+        /// Lấy một entity theo Id.
+        /// </summary>
+        public virtual async Task<TEntity?> GetByIdAsync(Guid id) 
+        {
+            var result = await context.Set<TEntity>().FirstOrDefaultAsync(e => e.Id == id);
+            return result; 
+        }
+
+        /// <summary>
+        /// Lấy tất cả entity. (Nếu TEntity là Auditable, cần thêm !IsDeleted)
         /// </summary>
         public async Task<IEnumerable<TEntity>> GetAllAsync()
         {
             return await context.Set<TEntity>().AsNoTracking().ToListAsync();
-        }
-
-        /// <summary>
-        /// Lấy một entity theo Id.
-        /// </summary>
-        public async Task<TEntity> GetByIdAsync(Guid id)
-        {
-            var result = await context.Set<TEntity>().FindAsync(id);
-            return result!;
+            // Lưu ý: Global Query Filter (HasQueryFilter) trong AppDbContext sẽ tự động xử lý !IsDeleted.
         }
 
         /// <summary>

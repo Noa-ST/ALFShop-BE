@@ -30,8 +30,8 @@ namespace eCommerceApp.Infrastructure.Repositories.Authentication
             var cred = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var expiration = DateTime.UtcNow.AddHours(2);
             var token = new JwtSecurityToken(
-                 issuer: config["JWT: Issuer"],
-                 audience: config["JWT: Audience"],
+                 issuer: config["JWT:Issuer"],
+                 audience: config["JWT:Audience"],
                  claims: claims,
                  expires: expiration,
                  signingCredentials: cred);
