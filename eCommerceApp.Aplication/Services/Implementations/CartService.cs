@@ -6,18 +6,21 @@ using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Interfaces;
 using System.Net;
+using Microsoft.AspNetCore.Http;
 
 public class CartService : ICartService
 {
     private readonly ICartRepository _cartRepository;
     private readonly IProductRepository _productRepository;
     private readonly IMapper _mapper;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public CartService(ICartRepository cartRepository, IProductRepository productRepository, IMapper mapper)
+    public CartService(ICartRepository cartRepository, IProductRepository productRepository, IMapper mapper, IHttpContextAccessor httpContextAccessor)
     {
         _cartRepository = cartRepository;
         _productRepository = productRepository;
         _mapper = mapper;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     // --- Hàm tiện ích: Lấy Cart hoặc tạo mới ---
@@ -164,7 +167,34 @@ public class CartService : ICartService
             itemDto.ShopName = product?.Shop?.Name ?? "N/A";
             itemDto.UnitPrice = unitPrice;
             itemDto.ItemTotal = itemTotal;
-            itemDto.ImageUrl = product?.Images?.FirstOrDefault()?.Url;
+            // ✅ Convert relative URL thành full URL cho ảnh trong cart
+            var relativeImageUrl = product?.Images?.FirstOrDefault()?.Url;
+            if (!string.IsNullOrEmpty(relativeImageUrl))
+            {
+                if (relativeImageUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || 
+                    relativeImageUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    itemDto.ImageUrl = relativeImageUrl;
+                }
+                else
+                {
+                    // Lấy base URL từ HttpContext nếu có, nếu không dùng fallback
+                    var request = _httpContextAccessor.HttpContext?.Request;
+                    if (request != null)
+                    {
+                        var baseUrl = $"{request.Scheme}://{request.Host}";
+                        itemDto.ImageUrl = $"{baseUrl}{relativeImageUrl}";
+                    }
+                    else
+                    {
+                        itemDto.ImageUrl = $"https://localhost:7109{relativeImageUrl}";
+                    }
+                }
+            }
+            else
+            {
+                itemDto.ImageUrl = null;
+            }
 
             cartDto.Items.Add(itemDto);
             cartDto.SubTotal += itemTotal;

@@ -20,6 +20,9 @@ Log.Logger.Information("Application is building...");
 builder.Services.AddInfrastructureService(builder.Configuration);
 builder.Services.AddApplicationService();
 
+// ✅ Đăng ký IHttpContextAccessor để sử dụng trong services
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
@@ -86,6 +89,9 @@ try
     }
 
     app.UseHttpsRedirection();
+
+    // Serve static files from wwwroot so uploaded images are accessible
+    app.UseStaticFiles();
 
     // ⚠️ Quan trọng: auth đã đăng ký trong ServiceContainer,
     // nên ở đây chỉ cần UseAuthentication + UseAuthorization

@@ -75,7 +75,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             return await _context.SaveChangesAsync();
         }
 
-        // ✅ AddWithImagesAsync - Giữ nguyên
+        // ✅ AddWithImagesAsync - Sửa để gán ProductId cho images và tránh duplicate Id
         public async Task<int> AddWithImagesAsync(Product product, IEnumerable<ProductImage>? images)
         {
             // Dùng ExecutionStrategy để hỗ trợ retry (chống lỗi InvalidOperationException)
@@ -87,15 +87,53 @@ namespace eCommerceApp.Infrastructure.Repositories
                 try
                 {
                     await _context.Products.AddAsync(product);
+                    // Save để lấy Product.Id
+                    await _context.SaveChangesAsync();
 
+                    // ✅ Tạo lại list images mới để tránh tracking conflicts và đảm bảo Id duy nhất
                     if (images != null && images.Any())
-                        await _context.ProductImages.AddRangeAsync(images);
+                    {
+                        var imagesToAdd = new List<ProductImage>();
+                        var usedIds = new HashSet<Guid>();
+                        
+                        foreach (var image in images)
+                        {
+                            // Đảm bảo Id duy nhất
+                            Guid imageId;
+                            if (image.Id == Guid.Empty || usedIds.Contains(image.Id))
+                            {
+                                do
+                                {
+                                    imageId = Guid.NewGuid();
+                                } while (usedIds.Contains(imageId));
+                            }
+                            else
+                            {
+                                imageId = image.Id;
+                            }
+                            
+                            usedIds.Add(imageId);
+                            
+                            // Tạo instance mới để tránh tracking conflicts
+                            imagesToAdd.Add(new ProductImage
+                            {
+                                Id = imageId,
+                                ProductId = product.Id,
+                                Url = image.Url,
+                                CreatedAt = image.CreatedAt,
+                                UpdatedAt = image.UpdatedAt,
+                                IsDeleted = image.IsDeleted
+                            });
+                        }
+                        
+                        await _context.ProductImages.AddRangeAsync(imagesToAdd);
+                    }
 
                     int result = await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
                     return result;
                 }
-                catch
+                catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
                     throw;

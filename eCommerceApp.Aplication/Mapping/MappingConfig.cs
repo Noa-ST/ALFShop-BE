@@ -91,16 +91,10 @@ namespace eCommerceApp.Aplication.Mapping
                 .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(_ => false))
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(_ => ProductStatus.Pending))
-                // ✅ [SỬA]: Product Entity dùng ProductImages (Navigation Property)
-                .ForMember(dest => dest.Images, opt => opt.MapFrom(src =>
-                    src.ImageUrls != null
-                        ? src.ImageUrls.Select(url => new ProductImage
-                        {
-                            Url = url,
-                            CreatedAt = DateTime.UtcNow,
-                            IsDeleted = false
-                        }).ToList()
-                        : new List<ProductImage>()));
+                // ✅ [SỬA]: Map CategoryId từ DTO sang GlobalCategoryId trong Entity
+                .ForMember(dest => dest.GlobalCategoryId, opt => opt.MapFrom(src => src.CategoryId))
+                // ✅ [SỬA]: Bỏ qua Images vì chúng ta xử lý thủ công trong ProductService để tránh duplicate Id
+                .ForMember(dest => dest.Images, opt => opt.Ignore());
 
             CreateMap<UpdateProduct, Product>()
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))

@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Seller")]
 [Route("api/Admin/[controller]")]
 [ApiController]
 public class GlobalCategoryController : ControllerBase
@@ -18,6 +18,7 @@ public class GlobalCategoryController : ControllerBase
     }
 
     [HttpPost("add")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ServiceResponse<GetGlobalCategory>), (int)HttpStatusCode.OK)]
     [ProducesResponseType((int)HttpStatusCode.BadRequest)]
     public async Task<IActionResult> CreateCategory([FromBody] CreateGlobalCategory dto)
@@ -32,6 +33,7 @@ public class GlobalCategoryController : ControllerBase
     }
 
     [HttpPut("update/{id:guid}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ServiceResponse<bool>), (int)HttpStatusCode.OK)]
     [ProducesResponseType((int)HttpStatusCode.BadRequest)]
     [ProducesResponseType((int)HttpStatusCode.NotFound)]
@@ -47,6 +49,7 @@ public class GlobalCategoryController : ControllerBase
     }
 
     [HttpDelete("delete/{id:guid}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ServiceResponse<bool>), (int)HttpStatusCode.OK)]
     [ProducesResponseType((int)HttpStatusCode.BadRequest)]
     [ProducesResponseType((int)HttpStatusCode.NotFound)]

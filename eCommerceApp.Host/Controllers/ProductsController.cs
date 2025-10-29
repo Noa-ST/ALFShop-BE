@@ -47,10 +47,18 @@ namespace eCommerceApp.Host.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var result = await productService.AddAsync(dto);
-            return result.Succeeded
-                ? Ok(new { message = result.Message })
-                : BadRequest(new { message = result.Message });
+            try
+            {
+                var result = await productService.AddAsync(dto);
+                return result.Succeeded
+                    ? Ok(new { message = result.Message })
+                    : BadRequest(new { message = result.Message });
+            }
+            catch (Exception ex)
+            {
+                // Log exception để debug
+                return StatusCode(500, new { message = $"Internal server error: {ex.Message}", detail = ex.StackTrace });
+            }
         }
 
         [HttpPut("update/{id:guid}")]
@@ -95,6 +103,18 @@ namespace eCommerceApp.Host.Controllers
             var response = await productService.ApproveProductAsync(id);
 
             return StatusCode((int)response.StatusCode, response);
+        }
+
+        [HttpPut("soft-delete/{id:guid}")]
+        [ProducesResponseType(typeof(ServiceResponse), (int)HttpStatusCode.OK)]
+        [ProducesResponseType((int)HttpStatusCode.NotFound)]
+        [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+        public async Task<IActionResult> SoftDelete(Guid id)
+        {
+            var result = await productService.DeleteAsync(id);
+            return result.Succeeded
+                ? Ok(new { message = result.Message })
+                : BadRequest(new { message = result.Message });
         }
     }
 }
