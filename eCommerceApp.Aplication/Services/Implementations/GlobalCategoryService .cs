@@ -43,11 +43,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
         public async Task<ServiceResponse<bool>> UpdateGlobalCategoryAsync(Guid id, UpdateGlobalCategory dto)
         {
-            if (id != dto.Id)
-            {
-                return ServiceResponse<bool>.Fail("ID trong đường dẫn và Body không khớp.");
-            }
-
             var category = await _globalCategoryRepository.GetByIdAsync(id);
             if (category == null || category.IsDeleted)
             {

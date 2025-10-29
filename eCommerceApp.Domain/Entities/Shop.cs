@@ -21,6 +21,15 @@ namespace eCommerceApp.Domain.Entities
         // Số lượng đánh giá (cần thiết cho độ tin cậy của Rating)
         public int ReviewCount { get; set; } = 0;
 
+        // ✅ [BỔ SUNG THÔNG TIN ĐỊA CHỈ SHOP]
+        [Required]
+        public string Street { get; set; } = null!; // Đường, Phường/Xã
+        
+        [Required]
+        public string City { get; set; } = null!; // Tỉnh/Thành phố (Dùng cho Lọc)
+        
+        public string? Country { get; set; } = "Việt Nam"; // Mặc định
+
         // Navigation
         [ForeignKey(nameof(SellerId))]
         public User? Seller { get; set; }

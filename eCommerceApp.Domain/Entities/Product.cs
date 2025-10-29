@@ -17,7 +17,7 @@ namespace eCommerceApp.Domain.Entities
 
         public int StockQuantity { get; set; }
         public ProductStatus Status { get; set; } = ProductStatus.Pending;
-
+        public string? Reason { get; set; }
         // Điểm đánh giá trung bình
         [Column(TypeName = "float")]
         public float AverageRating { get; set; } = 0.0f;

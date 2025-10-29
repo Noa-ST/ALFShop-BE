@@ -7,7 +7,9 @@ using eCommerceApp.Aplication.DTOs.ShopCategory; // ✅ Thêm Shop Category DTO
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Enums;
-using System.Collections.Generic; // Cần thiết cho List/IEnumerable
+using System.Collections.Generic;
+using eCommerceApp.Aplication.DTOs.Address;
+using eCommerceApp.Aplication.DTOs.Cart; // Cần thiết cho List/IEnumerable
 
 namespace eCommerceApp.Aplication.Mapping
 {
@@ -54,10 +56,18 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<CreateShop, Shop>()
                 .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(_ => false))
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
-                .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
+                .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
+                // ✅ [BỔ SUNG]: Ánh xạ các trường địa chỉ mới
+                .ForMember(dest => dest.Street, opt => opt.MapFrom(src => src.Street))
+                .ForMember(dest => dest.City, opt => opt.MapFrom(src => src.City))
+                .ForMember(dest => dest.Country, opt => opt.MapFrom(src => src.Country ?? "Việt Nam"));
 
             CreateMap<UpdateShop, Shop>()
-                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
+                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
+                // ✅ [BỔ SUNG]: Ánh xạ các trường địa chỉ mới cho Update
+                .ForMember(dest => dest.Street, opt => opt.MapFrom(src => src.Street))
+                .ForMember(dest => dest.City, opt => opt.MapFrom(src => src.City))
+                .ForMember(dest => dest.Country, opt => opt.MapFrom(src => src.Country ?? "Việt Nam"));
 
             // Ánh xạ Shop -> GetShop (Toàn bộ thông tin Shop)
             CreateMap<Shop, GetShop>()
@@ -119,6 +129,45 @@ namespace eCommerceApp.Aplication.Mapping
                 .ForMember(dest => dest.ShopLogo, opt => opt.MapFrom(src => src.Shop != null ? src.Shop.Logo : null))
                 // ✅ [SỬA]: CategoryDescription cũ -> GlobalCategory.Description mới
                 .ForMember(dest => dest.CategoryDescription, opt => opt.MapFrom(src => src.GlobalCategory != null ? src.GlobalCategory.Description : null));
+
+            // --- CART ---
+
+            // CartItem Entity -> GetCartItemDto
+            CreateMap<CartItem, GetCartItemDto>()
+                // Bỏ qua các trường tính toán (ProductName, ShopName, UnitPrice, ItemTotal)
+                // vì chúng được tính toán và ánh xạ thủ công trong CartService
+                .ForMember(dest => dest.ProductName, opt => opt.Ignore())
+                .ForMember(dest => dest.ShopName, opt => opt.Ignore())
+                .ForMember(dest => dest.UnitPrice, opt => opt.Ignore())
+                .ForMember(dest => dest.ItemTotal, opt => opt.Ignore())
+                .ForMember(dest => dest.ImageUrl, opt => opt.Ignore());
+
+            // Cart Entity -> GetCartDto
+            CreateMap<Cart, GetCartDto>()
+                .ForMember(dest => dest.CartId, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Items, opt => opt.MapFrom(src => src.Items))
+                .ForMember(dest => dest.SubTotal, opt => opt.Ignore()); // Tính thủ công trong Service
+
+            // DTO -> CartItem Entity (Không cần vì ta thêm trực tiếp vào Items collection)
+            // CreateMap<AddCartItem, CartItem>().ReverseMap(); 
+
+            // --- ADDRESS ---
+
+            // CreateAddress DTO -> Address Entity
+            CreateMap<CreateAddress, Address>()
+                .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(_ => false))
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
+                // Đảm bảo các trường Street, City, Country được ánh xạ
+                .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
+
+            // UpdateAddress DTO -> Address Entity
+            CreateMap<UpdateAddress, Address>()
+                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
+                .ForMember(dest => dest.Id, opt => opt.Ignore()) // Id đến từ URL
+                .ReverseMap(); // ReverseMap hỗ trợ ánh xạ từ Entity -> DTO
+
+            // Address Entity -> GetAddressDto
+            CreateMap<Address, GetAddressDto>().ReverseMap();
         }
     }
 }

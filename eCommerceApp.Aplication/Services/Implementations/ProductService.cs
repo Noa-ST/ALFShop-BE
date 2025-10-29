@@ -3,7 +3,9 @@ using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Product;
 using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Domain.Entities;
+using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Interfaces;
+using System.Net;
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -13,6 +15,71 @@ namespace eCommerceApp.Aplication.Services.Implementations
         , IProductImageRepository productImageRepo
     ) : IProductService
     {
+        public async Task<ServiceResponse> RejectProductAsync(Guid productId, string? rejectionReason)
+        {
+            var product = await productRepo.GetByIdAsync(productId);
+
+            // 1. Kiểm tra tồn tại và IsDeleted
+            if (product == null || product.IsDeleted)
+            {
+                return ServiceResponse.Fail("Không tìm thấy sản phẩm hoặc đã bị xóa.", HttpStatusCode.NotFound);
+            }
+
+            // 2. Kiểm tra trạng thái hiện tại (chỉ xử lý nếu đang Approved hoặc Pending)
+            if (product.Status != ProductStatus.Pending && product.Status != ProductStatus.Approved)
+            {
+                return ServiceResponse.Fail($"Sản phẩm không thể bị từ chối từ trạng thái hiện tại: {product.Status}.", HttpStatusCode.BadRequest);
+            }
+
+
+            // 3. Cập nhật trạng thái và Lý do
+            product.Status = ProductStatus.Rejected;
+            product.UpdatedAt = DateTime.UtcNow;
+
+            if (!string.IsNullOrEmpty(rejectionReason))
+            {
+                product.Reason = rejectionReason;
+            }
+            else
+            {
+                // Xóa lý do cũ (nếu có) nếu Admin không cung cấp lý do mới
+                product.Reason = null;
+            }
+           
+
+            int result = await productRepo.UpdateAsync(product);
+
+            return result > 0
+                ? ServiceResponse.Success("Từ chối sản phẩm thành công. Lý do đã được ghi nhận.")
+                : ServiceResponse.Fail("Lỗi cập nhật CSDL khi từ chối sản phẩm.", HttpStatusCode.InternalServerError);
+        }
+    
+    public async Task<ServiceResponse> ApproveProductAsync(Guid productId)
+        {
+            var product = await productRepo.GetByIdAsync(productId);
+
+            // 1. Kiểm tra tồn tại và IsDeleted
+            if (product == null || product.IsDeleted)
+            {
+                return ServiceResponse.Fail("Không tìm thấy sản phẩm hoặc đã bị xóa.", HttpStatusCode.NotFound);
+            }
+
+            // 2. Kiểm tra trạng thái hiện tại (chỉ duyệt nếu đang Pending)
+            if (product.Status != ProductStatus.Pending)
+            {
+                return ServiceResponse.Fail($"Sản phẩm không ở trạng thái chờ duyệt (Pending). Trạng thái hiện tại: {product.Status}.", HttpStatusCode.BadRequest);
+            }
+
+            // 3. Cập nhật trạng thái
+            product.Status = ProductStatus.Approved;
+            product.UpdatedAt = DateTime.UtcNow;
+
+            int result = await productRepo.UpdateAsync(product);
+
+            return result > 0
+                ? ServiceResponse.Success("Duyệt sản phẩm thành công.")
+                : ServiceResponse.Fail("Lỗi cập nhật CSDL khi duyệt sản phẩm.", HttpStatusCode.InternalServerError);
+        }
         public async Task<ServiceResponse> AddAsync(CreateProduct product)
         {
             var entity = mapper.Map<Product>(product);

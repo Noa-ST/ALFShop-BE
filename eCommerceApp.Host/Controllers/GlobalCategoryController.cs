@@ -66,10 +66,17 @@ public class GlobalCategoryController : ControllerBase
     [ProducesResponseType(typeof(ServiceResponse<IEnumerable<GetGlobalCategory>>), (int)HttpStatusCode.OK)]
     public async Task<IActionResult> GetAll()
     {
-        // Admin thường muốn xem dạng cây (includeChildren: true) để quản lý cấu trúc.
-        var response = await _globalCategoryService.GetAllGlobalCategoriesAsync(includeChildren: true);
-
-        // Endpoint này luôn trả về 200 OK, ngay cả khi danh sách rỗng (Data = [])
-        return Ok(response);
+        try
+        {
+            var response = await _globalCategoryService.GetAllGlobalCategoriesAsync(includeChildren: true);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            // In ra console để xem lỗi trong Terminal / Output
+            Console.WriteLine($"[ERROR] {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return StatusCode(500, $"Server Error: {ex.Message}");
+        }
     }
 }

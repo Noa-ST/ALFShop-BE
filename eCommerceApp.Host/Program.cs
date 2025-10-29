@@ -2,6 +2,7 @@
 using eCommerceApp.Infrastructure.DependencyInjection;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +20,10 @@ Log.Logger.Information("Application is building...");
 builder.Services.AddInfrastructureService(builder.Configuration);
 builder.Services.AddApplicationService();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+});
 
 // ---- Swagger ----
 builder.Services.AddEndpointsApiExplorer();

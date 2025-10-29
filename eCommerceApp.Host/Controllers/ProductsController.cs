@@ -1,6 +1,9 @@
-﻿using eCommerceApp.Aplication.DTOs.Product;
+﻿using eCommerceApp.Aplication.DTOs;
+using eCommerceApp.Aplication.DTOs.Product;
+using eCommerceApp.Aplication.Services.Implementations;
 using eCommerceApp.Aplication.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using System.Net;
 
 namespace eCommerceApp.Host.Controllers
 {
@@ -68,6 +71,30 @@ namespace eCommerceApp.Host.Controllers
             return result.Succeeded
                 ? Ok(new { message = result.Message })
                 : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPut("reject/{id:guid}")]
+        [ProducesResponseType(typeof(ServiceResponse), (int)HttpStatusCode.OK)]
+        [ProducesResponseType((int)HttpStatusCode.NotFound)]
+        [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+        public async Task<IActionResult> RejectProduct(
+        Guid id,
+        [FromQuery] string? rejectionReason = null)
+        {
+            var response = await productService.RejectProductAsync(id, rejectionReason);
+
+            return StatusCode((int)response.StatusCode, response);
+        }
+
+        [HttpPut("approve/{id:guid}")]
+        [ProducesResponseType(typeof(ServiceResponse), (int)HttpStatusCode.OK)]
+        [ProducesResponseType((int)HttpStatusCode.NotFound)]
+        [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+        public async Task<IActionResult> ApproveProduct(Guid id)
+        {
+            var response = await productService.ApproveProductAsync(id);
+
+            return StatusCode((int)response.StatusCode, response);
         }
     }
 }

@@ -12,5 +12,8 @@ namespace eCommerceApp.Aplication.Services.Interfaces
         Task<ServiceResponse> AddAsync(CreateProduct product);
         Task<ServiceResponse> UpdateAsync(Guid id, UpdateProduct product);
         Task<ServiceResponse> DeleteAsync(Guid id);
+
+        Task<ServiceResponse> ApproveProductAsync(Guid productId);
+        Task<ServiceResponse> RejectProductAsync(Guid productId, string? rejectionReason);
     }
 }
