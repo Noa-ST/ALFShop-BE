@@ -1,6 +1,6 @@
 using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Payment;
-using eCommerceApp.Application.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

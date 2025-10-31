@@ -170,7 +170,7 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<Message, MessageDto>()
                 .ForMember(dest => dest.MessageId, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.SenderName, opt => opt.MapFrom(src => src.Sender != null ? src.Sender.FullName : null))
-                .ForMember(dest => dest.SenderAvatarUrl, opt => opt.MapFrom(src => src.Sender != null ? src.Sender.AvatarUrl : null))
+                .ForMember(dest => dest.SenderAvatarUrl, opt => opt.Ignore()) // User entity không có AvatarUrl property
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => src.UpdatedAt))
                 .ForMember(dest => dest.ReplyToMessage, opt => opt.Ignore())
                 .ForMember(dest => dest.OrderAttachment, opt => opt.Ignore())

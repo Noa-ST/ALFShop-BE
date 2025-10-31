@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 
-namespace eCommerceApp.Application.DTOs.Order
+namespace eCommerceApp.Aplication.DTOs.Order
 {
     public class OrderResponseDTO
     {

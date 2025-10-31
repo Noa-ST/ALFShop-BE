@@ -1,7 +1,7 @@
 ﻿using eCommerceApp.Aplication.DTOs;
-using eCommerceApp.Application.DTOs.Order;
+using eCommerceApp.Aplication.DTOs.Order;
 
-namespace eCommerceApp.Application.Services.Interfaces
+namespace eCommerceApp.Aplication.Services.Interfaces
 {
     public interface IOrderService
     {

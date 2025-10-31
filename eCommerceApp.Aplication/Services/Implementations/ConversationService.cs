@@ -1,7 +1,7 @@
 using AutoMapper;
 using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Chat;
-using eCommerceApp.Application.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Interfaces;

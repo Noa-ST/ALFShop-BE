@@ -1,8 +1,8 @@
 ﻿using AutoMapper;
-using eCommerceApp.Application.DTOs.Order;
+using eCommerceApp.Aplication.DTOs.Order;
 using eCommerceApp.Domain.Entities;
 
-namespace eCommerceApp.Application.Mapping
+namespace eCommerceApp.Aplication.Mapping
 {
     public class MappingProfile : Profile
     {

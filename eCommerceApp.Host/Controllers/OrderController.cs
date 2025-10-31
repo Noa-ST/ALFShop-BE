@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using eCommerceApp.Application.DTOs.Order;
-using eCommerceApp.Application.Services.Interfaces;
+using eCommerceApp.Aplication.DTOs.Order;
+using eCommerceApp.Aplication.Services.Interfaces;
 using System.Security.Claims;
 using System.Net;
 

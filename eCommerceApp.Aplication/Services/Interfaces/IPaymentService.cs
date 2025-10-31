@@ -2,7 +2,7 @@
 using eCommerceApp.Aplication.DTOs.Payment;
 using eCommerceApp.Domain.Entities;
 
-namespace eCommerceApp.Application.Services.Interfaces
+namespace eCommerceApp.Aplication.Services.Interfaces
 {
     public interface IPaymentService
     {
