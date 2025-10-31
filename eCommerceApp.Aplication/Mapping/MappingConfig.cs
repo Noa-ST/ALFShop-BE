@@ -28,9 +28,12 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<UpdateGlobalCategory, GlobalCategory>()
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
 
+            // Map GlobalCategory -> GetGlobalCategory
+            // Tránh map Parent để hạn chế tạo vòng tham chiếu khi serialize JSON (gây cắt bớt Children sâu)
             CreateMap<GlobalCategory, GetGlobalCategory>()
                 .ForMember(dest => dest.ParentId, opt => opt.MapFrom(src => src.ParentId))
-                .ForMember(dest => dest.Parent, opt => opt.MapFrom(src => src.Parent))
+                .ForMember(dest => dest.Parent, opt => opt.Ignore())
+                .ForMember(dest => dest.Children, opt => opt.MapFrom(src => src.Children))
                 .ReverseMap();
 
             // --- SHOP CATEGORY (Danh mục của Seller) ---
@@ -151,7 +154,6 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<CreateAddress, Address>()
                 .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(_ => false))
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
-                // Đảm bảo các trường Street, City, Country được ánh xạ
                 .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
 
             // UpdateAddress DTO -> Address Entity

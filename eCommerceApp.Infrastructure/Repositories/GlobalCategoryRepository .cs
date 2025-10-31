@@ -17,14 +17,37 @@ namespace eCommerceApp.Infrastructure.Repositories
         }
         public async Task<IEnumerable<GlobalCategory>> GetAllCategoriesWithChildrenAsync()
         {
-            // Lấy tất cả các danh mục cấp cao nhất (ParentId == null)
-            // và bao gồm các danh mục con (Children) nếu bạn muốn trả về cấu trúc cây.
-            // Nếu không cần cấu trúc cây, chỉ cần gọi GetAllAsync().
-
-            return await _context.GlobalCategoris
-                .Where(c => c.ParentId == null && !c.IsDeleted) // Chỉ lấy các Root Category
-                .Include(c => c.Children) // Bao gồm 1 cấp con
+            // Nạp toàn bộ danh mục (không xoá)
+            var allCategories = await _context.GlobalCategoris
+                .Where(c => !c.IsDeleted)
+                .AsNoTracking()
                 .ToListAsync();
+
+            // Lấy danh mục gốc (ParentId == null)
+            var roots = allCategories.Where(c => c.ParentId == null).ToList();
+
+            // Tạo lookup các con theo ParentId (loại bỏ null)
+            var childrenLookup = allCategories
+                .Where(c => c.ParentId.HasValue)
+                .ToLookup(c => c.ParentId!.Value);
+
+            void BuildChildren(GlobalCategory node)
+            {
+                var children = childrenLookup[node.Id].ToList();
+                node.Children = children;
+
+                foreach (var child in children)
+                {
+                    BuildChildren(child);
+                }
+            }
+
+            foreach (var root in roots)
+            {
+                BuildChildren(root);
+            }
+
+            return roots;
         }
     }
 }
