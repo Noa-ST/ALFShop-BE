@@ -27,6 +27,7 @@ namespace eCommerceApp.Infrastructure.Data
         public DbSet<Order> Orders { get; set; } = null!;
         public DbSet<OrderItem> OrderItems { get; set; } = null!;
         public DbSet<Payment> Payments { get; set; } = null!;
+        public DbSet<PaymentHistory> PaymentHistories { get; set; } = null!;
         public DbSet<Review> Reviews { get; set; } = null!;
         public DbSet<Conversation> Conversations { get; set; } = null!; // ✅ Đã sửa
         public DbSet<Message> Messages { get; set; } = null!;
@@ -182,9 +183,15 @@ namespace eCommerceApp.Infrastructure.Data
             // Order - Payment (1:1)
             modelBuilder.Entity<Payment>()
                 .HasOne(p => p.Order)
-                // ❌ SỬA LỖI CS1061: Thay thế .WithOne(o => o.Payment) bằng .WithOne() vì Order không còn Navigation Property
                 .WithOne()
                 .HasForeignKey<Payment>(p => p.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Payment - PaymentHistory (1:Many)
+            modelBuilder.Entity<PaymentHistory>()
+                .HasOne(ph => ph.Payment)
+                .WithMany()
+                .HasForeignKey(ph => ph.PaymentId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Order - Shop (Bổ sung cho Multi-shop Order)
@@ -221,6 +228,13 @@ namespace eCommerceApp.Infrastructure.Data
                 .HasForeignKey(c => c.User2Id)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<Conversation>()
+                .HasIndex(c => new { c.User1Id, c.User2Id })
+                .IsUnique();
+
+            modelBuilder.Entity<Conversation>()
+                .HasIndex(c => c.LastMessageAt);
+
             // Message -> Conversation / Sender
             modelBuilder.Entity<Message>()
                 .HasOne(m => m.Conversation)
@@ -233,6 +247,31 @@ namespace eCommerceApp.Infrastructure.Data
                 .WithMany()
                 .HasForeignKey(m => m.SenderId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // TODO: Uncomment khi Message entity có các properties này
+            // modelBuilder.Entity<Message>()
+            //     .HasOne(m => m.ReplyToMessage)
+            //     .WithMany(m => m.Replies)
+            //     .HasForeignKey(m => m.ReplyToMessageId)
+            //     .OnDelete(DeleteBehavior.Restrict);
+
+            // modelBuilder.Entity<Message>()
+            //     .HasOne(m => m.Order)
+            //     .WithMany()
+            //     .HasForeignKey(m => m.OrderId)
+            //     .OnDelete(DeleteBehavior.SetNull);
+
+            // modelBuilder.Entity<Message>()
+            //     .HasOne(m => m.Product)
+            //     .WithMany()
+            //     .HasForeignKey(m => m.ProductId)
+            //     .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Message>()
+                .HasIndex(m => new { m.ConversationId, m.CreatedAt });
+
+            modelBuilder.Entity<Message>()
+                .HasIndex(m => new { m.ConversationId, m.IsRead });
             // --------------------------------------------------------
 
             // ViolationReport -> Product / Reporter / Admin

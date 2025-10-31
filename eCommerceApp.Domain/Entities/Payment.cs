@@ -20,6 +20,8 @@ namespace eCommerceApp.Domain.Entities
         public decimal Amount { get; set; }
 
         public string? TransactionId { get; set; } // ID giao dịch từ cổng thanh toán (VNPAY, Momo...)
+        
+        public int? OrderCode { get; set; } // OrderCode từ PayOS (int) để map với OrderId (Guid)
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow; // Cần cập nhật khi trạng thái thay đổi

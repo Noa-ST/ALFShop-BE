@@ -22,21 +22,34 @@ namespace eCommerceApp.Infrastructure.Repositories
             return order;
         }
 
-        public async Task<IEnumerable<Order>> GetOrdersByCustomerIdAsync(Guid customerId)
-    => await _context.Orders
-        .Where(o => o.CustomerId == customerId.ToString())
-        .ToListAsync();
+        public async Task<IEnumerable<Order>> GetOrdersByCustomerIdAsync(string customerId)
+            => await _context.Orders
+                .Where(o => o.CustomerId == customerId)
+                .Include(o => o.Customer)
+                .Include(o => o.Shop)
+                .Include(o => o.Items)!
+                    .ThenInclude(oi => oi.Product)
+                .ToListAsync();
 
         public async Task<IEnumerable<Order>> GetOrdersByShopIdAsync(Guid shopId)
             => await _context.Orders
                 .Where(o => o.ShopId == shopId)
+                .Include(o => o.Customer)
+                .Include(o => o.Shop)
+                .Include(o => o.Items)!
+                    .ThenInclude(oi => oi.Product)
                 .ToListAsync();
 
         public async Task<IEnumerable<Order>> GetAllOrdersAsync()
             => await _context.Orders.Include(o => o.Customer).Include(o => o.Shop).ToListAsync();
 
         public async Task<Order> GetByIdAsync(Guid id)
-            => await _context.Orders.FindAsync(id);
+            => await _context.Orders
+                .Include(o => o.Customer)
+                .Include(o => o.Shop)
+                .Include(o => o.Items)!
+                    .ThenInclude(oi => oi.Product)
+                .FirstOrDefaultAsync(o => o.Id == id) ?? throw new Exception("Order not found");
 
         public async Task UpdateStatusAsync(Guid orderId, string status)
         {
@@ -51,5 +64,10 @@ namespace eCommerceApp.Infrastructure.Repositories
             await _context.SaveChangesAsync();
         }
 
+        public async Task UpdateOrderAsync(Order order)
+        {
+            _context.Orders.Update(order);
+            await _context.SaveChangesAsync();
+        }
     }
 }
