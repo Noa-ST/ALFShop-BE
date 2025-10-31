@@ -33,6 +33,7 @@ namespace eCommerceApp.Aplication.DependencyInjection
 
             services.AddScoped<IOrderService, OrderService>();
             services.AddScoped<IPaymentService, PaymentService>();
+            services.AddScoped<IConversationService, ConversationService>();
 
             return services;
         }

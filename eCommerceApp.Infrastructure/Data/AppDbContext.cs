@@ -221,6 +221,13 @@ namespace eCommerceApp.Infrastructure.Data
                 .HasForeignKey(c => c.User2Id)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<Conversation>()
+                .HasIndex(c => new { c.User1Id, c.User2Id })
+                .IsUnique();
+
+            modelBuilder.Entity<Conversation>()
+                .HasIndex(c => c.LastMessageAt);
+
             // Message -> Conversation / Sender
             modelBuilder.Entity<Message>()
                 .HasOne(m => m.Conversation)
@@ -233,6 +240,30 @@ namespace eCommerceApp.Infrastructure.Data
                 .WithMany()
                 .HasForeignKey(m => m.SenderId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.ReplyToMessage)
+                .WithMany(m => m.Replies)
+                .HasForeignKey(m => m.ReplyToMessageId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.Order)
+                .WithMany()
+                .HasForeignKey(m => m.OrderId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Message>()
+                .HasOne(m => m.Product)
+                .WithMany()
+                .HasForeignKey(m => m.ProductId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Message>()
+                .HasIndex(m => new { m.ConversationId, m.CreatedAt });
+
+            modelBuilder.Entity<Message>()
+                .HasIndex(m => new { m.ConversationId, m.IsRead });
             // --------------------------------------------------------
 
             // ViolationReport -> Product / Reporter / Admin

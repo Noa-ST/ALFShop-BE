@@ -1,4 +1,5 @@
 ﻿using eCommerceApp.Aplication.Services.Interfaces.Logging;
+using eCommerceApp.Application.Services.Interfaces;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces;
 using eCommerceApp.Domain.Interfaces.Authentication;
@@ -8,6 +9,7 @@ using eCommerceApp.Infrastructure.Midleware;
 using eCommerceApp.Infrastructure.Repositories;
 using eCommerceApp.Infrastructure.Repositories.Authentication;
 using eCommerceApp.Infrastructure.Service;
+using eCommerceApp.Infrastructure.Realtime;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
@@ -86,6 +88,9 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IAddressRepository, AddressRepository>();
             services.AddScoped<IOrderRepository, OrderRepository>();
             services.AddScoped<IPaymentRepository, PaymentRepository>();
+            services.AddScoped<IConversationRepository, ConversationRepository>();
+            services.AddScoped<IMessageRepository, MessageRepository>();
+            services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
 
             return services;
         }
