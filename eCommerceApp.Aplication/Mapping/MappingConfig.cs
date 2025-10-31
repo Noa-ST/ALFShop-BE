@@ -10,6 +10,7 @@ using eCommerceApp.Domain.Enums;
 using System.Collections.Generic;
 using eCommerceApp.Aplication.DTOs.Address;
 using eCommerceApp.Aplication.DTOs.Cart; // Cần thiết cho List/IEnumerable
+using eCommerceApp.Aplication.DTOs.Chat;
 
 namespace eCommerceApp.Aplication.Mapping
 {
@@ -164,6 +165,27 @@ namespace eCommerceApp.Aplication.Mapping
 
             // Address Entity -> GetAddressDto
             CreateMap<Address, GetAddressDto>().ReverseMap();
+
+            // --- CHAT ---
+            CreateMap<Message, MessageDto>()
+                .ForMember(dest => dest.MessageId, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.SenderName, opt => opt.MapFrom(src => src.Sender != null ? src.Sender.FullName : null))
+                .ForMember(dest => dest.SenderAvatarUrl, opt => opt.MapFrom(src => src.Sender != null ? src.Sender.AvatarUrl : null))
+                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => src.UpdatedAt))
+                .ForMember(dest => dest.ReplyToMessage, opt => opt.Ignore())
+                .ForMember(dest => dest.OrderAttachment, opt => opt.Ignore())
+                .ForMember(dest => dest.ProductAttachment, opt => opt.Ignore()); // xử lý thủ công để tránh vòng tròn
+
+            CreateMap<Conversation, ConversationSummaryDto>()
+                .ForMember(dest => dest.ConversationId, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.LastMessageAt, opt => opt.MapFrom(src => src.LastMessageAt))
+                .ForMember(dest => dest.LastMessageContent, opt => opt.MapFrom(src => src.LastMessageContent))
+                .ForMember(dest => dest.LastMessageSenderId, opt => opt.MapFrom(src => src.LastMessageSenderId))
+                .ForMember(dest => dest.IsBlocked, opt => opt.MapFrom(src => src.IsBlocked));
+
+            CreateMap<Conversation, ConversationDetailDto>()
+                .ForMember(dest => dest.ConversationId, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Messages, opt => opt.Ignore());
         }
     }
 }
