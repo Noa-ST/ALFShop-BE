@@ -4,6 +4,7 @@
     {
         COD,
         Wallet,
-        Bank
+        Bank,
+        Cash
     }
 }

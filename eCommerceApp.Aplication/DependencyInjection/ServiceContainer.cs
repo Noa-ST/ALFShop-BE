@@ -5,6 +5,8 @@ using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Aplication.Services.Interfaces.Authentication;
 using eCommerceApp.Aplication.Validations;
 using eCommerceApp.Aplication.Validations.Authentication;
+using eCommerceApp.Application.Services.Implementations;
+using eCommerceApp.Application.Services.Interfaces;
 using eCommerceApp.Domain.Entities;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -20,13 +22,18 @@ namespace eCommerceApp.Aplication.DependencyInjection
             services.AddScoped<IProductService, ProductService>();
             services.AddScoped<IGlobalCategoryService, GlobalCategoryService>();
             services.AddScoped<IShopService, ShopService>();
+            services.AddScoped<IShopCategoryService, ShopCategoryService>();
+            services.AddScoped<ICartService, CartService>();
+            services.AddScoped<IAddressService, AddressService>();
+
             services.AddFluentValidationAutoValidation();
             services.AddValidatorsFromAssemblyContaining<CreateUserValidator>();
             services.AddScoped<IValidationService, ValidationService>();
             services.AddScoped<IAuthenticationService, AuthenticationService>();
-            services.AddScoped<IShopCategoryService, ShopCategoryService>();
-            services.AddScoped<ICartService, CartService>();
-            services.AddScoped<IAddressService, AddressService>();
+
+            services.AddScoped<IOrderService, OrderService>();
+            services.AddScoped<IPaymentService, PaymentService>();
+
             return services;
         }
     }
