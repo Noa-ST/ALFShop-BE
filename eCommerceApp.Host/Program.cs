@@ -1,5 +1,6 @@
 ﻿using eCommerceApp.Aplication.DependencyInjection;
 using eCommerceApp.Infrastructure.DependencyInjection;
+using eCommerceApp.Infrastructure.Realtime;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text.Json.Serialization;
@@ -27,6 +28,8 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
 });
+
+builder.Services.AddSignalR();
 
 // ---- Swagger ----
 builder.Services.AddEndpointsApiExplorer();
@@ -99,6 +102,7 @@ try
     app.UseAuthorization();
 
     app.MapControllers();
+    app.MapHub<ChatHub>("/hubs/chat");
 
     Log.Logger.Information("Application is running...");
     app.Run();
