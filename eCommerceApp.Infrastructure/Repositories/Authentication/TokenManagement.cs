@@ -16,10 +16,16 @@ namespace eCommerceApp.Infrastructure.Repositories.Authentication
     {
         public async Task<int> AddRefreshToken(string userId, string refreshToken)
         {
+            // Refresh token expires in 7 days
+            var expiresAt = DateTime.UtcNow.AddDays(7);
+            
             context.RefreshTokens.Add(new RefreshToken
             {
                 UserId = userId,
-                Token = refreshToken
+                Token = refreshToken,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = expiresAt,
+                IsRevoked = false
             });
             return await context.SaveChangesAsync();
         }
@@ -62,20 +68,78 @@ namespace eCommerceApp.Infrastructure.Repositories.Authentication
         }
 
         public async Task<string> GetUserIdByRefreshToken(string refreshToken)
-            => (await context.RefreshTokens.FirstOrDefaultAsync(_ => _.Token == refreshToken))!.UserId;
+        {
+            var token = await context.RefreshTokens.FirstOrDefaultAsync(_ => _.Token == refreshToken);
+            return token?.UserId ?? string.Empty;
+        }
 
         public async Task<int> UpdateRefreshToken(string userId, string refreshToken)
         {
-            var user = await context.RefreshTokens.FirstOrDefaultAsync( _ => _.Token == refreshToken);
+            var user = await context.RefreshTokens.FirstOrDefaultAsync(_ => _.Token == refreshToken);
             if (user == null) return -1;
             user.Token = refreshToken;
             return await context.SaveChangesAsync();
         }
 
+        public async Task<string> UpdateRefreshTokenAndGetNew(string userId, string oldRefreshToken)
+        {
+            // Revoke old token
+            var oldToken = await context.RefreshTokens.FirstOrDefaultAsync(_ => _.Token == oldRefreshToken);
+            if (oldToken != null)
+            {
+                oldToken.IsRevoked = true;
+            }
+
+            // Create new refresh token
+            string newRefreshToken = GetRefreshToken();
+            var expiresAt = DateTime.UtcNow.AddDays(7);
+            
+            context.RefreshTokens.Add(new RefreshToken
+            {
+                UserId = userId,
+                Token = newRefreshToken,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = expiresAt,
+                IsRevoked = false
+            });
+            
+            await context.SaveChangesAsync();
+            return newRefreshToken;
+        }
+
         public async Task<bool> ValidateRefreshToken(string refreshToken)
         {
-            var user = await context.RefreshTokens.FirstOrDefaultAsync(_ => _.Token == refreshToken);
-            return user != null;
+            var token = await context.RefreshTokens.FirstOrDefaultAsync(_ => _.Token == refreshToken);
+            if (token == null) return false;
+            
+            // Check if token is revoked or expired
+            if (token.IsRevoked || token.ExpiresAt < DateTime.UtcNow)
+                return false;
+            
+            return true;
+        }
+
+        public async Task<int> RevokeRefreshToken(string refreshToken)
+        {
+            var token = await context.RefreshTokens.FirstOrDefaultAsync(_ => _.Token == refreshToken);
+            if (token == null) return 0;
+            
+            token.IsRevoked = true;
+            return await context.SaveChangesAsync();
+        }
+
+        public async Task<int> RevokeAllUserRefreshTokens(string userId)
+        {
+            var tokens = await context.RefreshTokens
+                .Where(_ => _.UserId == userId && !_.IsRevoked)
+                .ToListAsync();
+            
+            foreach (var token in tokens)
+            {
+                token.IsRevoked = true;
+            }
+            
+            return await context.SaveChangesAsync();
         }
     }
 }

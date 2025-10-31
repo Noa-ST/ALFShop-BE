@@ -10,6 +10,8 @@ using eCommerceApp.Infrastructure.Repositories;
 using eCommerceApp.Infrastructure.Repositories.Authentication;
 using eCommerceApp.Infrastructure.Service;
 using eCommerceApp.Infrastructure.Realtime;
+using eCommerceApp.Infrastructure.Services;
+using eCommerceApp.Aplication.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
@@ -91,6 +93,7 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IConversationRepository, ConversationRepository>();
             services.AddScoped<IMessageRepository, MessageRepository>();
             services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
+            services.AddScoped<IEmailService, EmailService>();
 
             return services;
         }

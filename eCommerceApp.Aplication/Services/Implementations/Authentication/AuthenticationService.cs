@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Identity;
+using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Aplication.Services.Interfaces.Authentication;
 using eCommerceApp.Aplication.Validations;
 using eCommerceApp.Domain.Entities.Identity;
@@ -18,7 +19,10 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
         IMapper mapper,
         IValidator<CreateUser> createUserValidator,
         IValidator<LoginUser> loginUserValidator,
+        IValidator<ChangePasswordRequest> changePasswordValidator,
+        IValidator<ResetPasswordRequest> resetPasswordValidator,
         IValidationService validationService,
+        IEmailService emailService,
         UserManager<User> userManager,
         RoleManager<IdentityRole> roleManager
     ) : IAuthenticationService
@@ -54,7 +58,15 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                 return new ServiceResponse { Message = "Error occurred while assigning role" };
             }
 
-            return new ServiceResponse { Succeeded = true, Message = "Account created!" };
+            // Send email confirmation
+            var emailConfirmationToken = await userManager.GenerateEmailConfirmationTokenAsync(mappedModel);
+            await emailService.SendEmailConfirmationEmailAsync(
+                mappedModel.Email!,
+                emailConfirmationToken,
+                mappedModel.FullName ?? mappedModel.Email!
+            );
+
+            return new ServiceResponse { Succeeded = true, Message = "Account created! Please check your email to confirm your account." };
         }
 
         // Đăng nhập
@@ -178,9 +190,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
             }
 
             string newJwtToken = tokenManagement.GenerateToken(claims);
-            string newRefreshToken = tokenManagement.GetRefreshToken();
-
-            await tokenManagement.UpdateRefreshToken(userIdString, newRefreshToken);
+            string newRefreshToken = await tokenManagement.UpdateRefreshTokenAndGetNew(userIdString, refreshToken);
 
             var mainRole = roles.FirstOrDefault() ?? "Customer";
 
@@ -194,6 +204,192 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                 UserId: user.Id,
                 Fullname: user.FullName ?? ""
             );
+        }
+
+        // Logout
+        public async Task<ServiceResponse> Logout(string userId, string refreshToken)
+        {
+            var result = await tokenManagement.RevokeRefreshToken(refreshToken);
+            if (result <= 0)
+            {
+                return new ServiceResponse { Message = "Failed to logout" };
+            }
+            return new ServiceResponse { Succeeded = true, Message = "Logged out successfully" };
+        }
+
+        // Get current user info
+        public async Task<UserInfoDto?> GetCurrentUser(string userId)
+        {
+            var user = await userManager.FindByIdAsync(userId);
+            if (user == null) return null;
+
+            var roles = await userManager.GetRolesAsync(user);
+            return new UserInfoDto
+            {
+                Id = user.Id,
+                Email = user.Email ?? "",
+                FullName = user.FullName ?? "",
+                PhoneNumber = user.PhoneNumber,
+                EmailConfirmed = user.EmailConfirmed,
+                Roles = roles.ToList()
+            };
+        }
+
+        // Change password
+        public async Task<ServiceResponse> ChangePassword(string userId, ChangePasswordRequest request)
+        {
+            var validation = await validationService.ValidateAsync(request, changePasswordValidator);
+            if (!validation.Succeeded) return validation;
+
+            var user = await userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return new ServiceResponse { Message = "User not found" };
+            }
+
+            var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+            if (!result.Succeeded)
+            {
+                return new ServiceResponse
+                {
+                    Message = string.Join(";", result.Errors.Select(e => e.Description))
+                };
+            }
+
+            return new ServiceResponse { Succeeded = true, Message = "Password changed successfully" };
+        }
+
+        // Forgot password - Send reset token
+        public async Task<ServiceResponse> ForgotPassword(string email)
+        {
+            var user = await userManager.FindByEmailAsync(email);
+            if (user == null)
+            {
+                // Don't reveal if email exists for security
+                return new ServiceResponse { Succeeded = true, Message = "If email exists, password reset link has been sent" };
+            }
+
+            var token = await userManager.GeneratePasswordResetTokenAsync(user);
+            var emailSent = await emailService.SendPasswordResetEmailAsync(
+                user.Email!,
+                token,
+                user.FullName ?? user.Email!
+            );
+
+            if (!emailSent)
+            {
+                return new ServiceResponse { Message = "Failed to send password reset email. Please try again later." };
+            }
+            
+            return new ServiceResponse { Succeeded = true, Message = "If email exists, password reset link has been sent" };
+        }
+
+        // Reset password with token
+        public async Task<ServiceResponse> ResetPassword(ResetPasswordRequest request)
+        {
+            var validation = await validationService.ValidateAsync(request, resetPasswordValidator);
+            if (!validation.Succeeded) return validation;
+
+            var user = await userManager.FindByEmailAsync(request.Email);
+            if (user == null)
+            {
+                return new ServiceResponse { Message = "User not found" };
+            }
+
+            var result = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+            if (!result.Succeeded)
+            {
+                return new ServiceResponse
+                {
+                    Message = string.Join(";", result.Errors.Select(e => e.Description))
+                };
+            }
+
+            // Revoke all refresh tokens for security
+            await tokenManagement.RevokeAllUserRefreshTokens(user.Id);
+
+            return new ServiceResponse { Succeeded = true, Message = "Password reset successfully" };
+        }
+
+        // Send email confirmation
+        public async Task<ServiceResponse> SendEmailConfirmation(string email)
+        {
+            var user = await userManager.FindByEmailAsync(email);
+            if (user == null)
+            {
+                return new ServiceResponse { Message = "User not found" };
+            }
+
+            if (user.EmailConfirmed)
+            {
+                return new ServiceResponse { Message = "Email is already confirmed" };
+            }
+
+            var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
+            var emailSent = await emailService.SendEmailConfirmationEmailAsync(
+                user.Email!,
+                token,
+                user.FullName ?? user.Email!
+            );
+
+            if (!emailSent)
+            {
+                return new ServiceResponse { Message = "Failed to send confirmation email. Please try again later." };
+            }
+
+            return new ServiceResponse { Succeeded = true, Message = "Confirmation email sent" };
+        }
+
+        // Confirm email
+        public async Task<ServiceResponse> ConfirmEmail(string email, string token)
+        {
+            var user = await userManager.FindByEmailAsync(email);
+            if (user == null)
+            {
+                return new ServiceResponse { Message = "User not found" };
+            }
+
+            var result = await userManager.ConfirmEmailAsync(user, token);
+            if (!result.Succeeded)
+            {
+                return new ServiceResponse
+                {
+                    Message = string.Join(";", result.Errors.Select(e => e.Description))
+                };
+            }
+
+            return new ServiceResponse { Succeeded = true, Message = "Email confirmed successfully" };
+        }
+
+        // Update profile
+        public async Task<ServiceResponse> UpdateProfile(string userId, UpdateProfileRequest request)
+        {
+            var user = await userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return new ServiceResponse { Message = "User not found" };
+            }
+
+            if (!string.IsNullOrEmpty(request.FullName))
+            {
+                user.FullName = request.FullName;
+            }
+
+            if (!string.IsNullOrEmpty(request.PhoneNumber))
+            {
+                user.PhoneNumber = request.PhoneNumber;
+            }
+
+            var result = await userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                return new ServiceResponse
+                {
+                    Message = string.Join(";", result.Errors.Select(e => e.Description))
+                };
+            }
+
+            return new ServiceResponse { Succeeded = true, Message = "Profile updated successfully" };
         }
     }
 }
