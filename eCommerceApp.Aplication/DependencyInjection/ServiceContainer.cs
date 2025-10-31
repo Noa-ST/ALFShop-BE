@@ -33,7 +33,11 @@ namespace eCommerceApp.Aplication.DependencyInjection
 
             services.AddScoped<IOrderService, OrderService>();
             services.AddScoped<IPaymentService, PaymentService>();
-            services.AddScoped<IConversationService, ConversationService>();
+            // services.AddScoped<IConversationService, ConversationService>(); // TODO: Uncomment khi có ConversationService
+
+            // PayOS Service
+            services.AddHttpClient<IPayOSService, PayOSService>();
+            services.AddScoped<IPayOSService, PayOSService>();
 
             return services;
         }

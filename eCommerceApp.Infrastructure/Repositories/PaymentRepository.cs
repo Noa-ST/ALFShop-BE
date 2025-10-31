@@ -37,8 +37,16 @@ namespace eCommerceApp.Infrastructure.Repositories
                 payment.Status = PaymentStatus.Pending;
             }
 
+            payment.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task UpdatePaymentAsync(Payment payment)
+        {
+            payment.UpdatedAt = DateTime.UtcNow;
+            _context.Payments.Update(payment);
+            await _context.SaveChangesAsync();
         }
 
         public async Task<Payment> ProcessPaymentAsync(Guid orderId, string method)
@@ -61,6 +69,38 @@ namespace eCommerceApp.Infrastructure.Repositories
             await _context.SaveChangesAsync();
 
             return payment;
+        }
+
+        public async Task<Payment?> GetByOrderIdAsync(Guid orderId)
+        {
+            return await _context.Payments
+                .FirstOrDefaultAsync(p => p.OrderId == orderId);
+        }
+
+        public async Task<Payment?> GetByIdAsync(Guid paymentId)
+        {
+            return await _context.Payments
+                .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
+        }
+
+        public async Task<Payment?> GetByOrderCodeAsync(int orderCode)
+        {
+            return await _context.Payments
+                .FirstOrDefaultAsync(p => p.OrderCode == orderCode);
+        }
+
+        public async Task AddHistoryAsync(PaymentHistory history)
+        {
+            await _context.PaymentHistories.AddAsync(history);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<IEnumerable<PaymentHistory>> GetHistoryByPaymentIdAsync(Guid paymentId)
+        {
+            return await _context.PaymentHistories
+                .Where(ph => ph.PaymentId == paymentId)
+                .OrderByDescending(ph => ph.CreatedAt)
+                .ToListAsync();
         }
     }
 }
