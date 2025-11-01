@@ -11,5 +11,11 @@ namespace eCommerceApp.Domain.Interfaces
 
         // Lấy CartItem cụ thể trong Cart
         Task<CartItem?> GetCartItemAsync(Guid cartId, Guid productId);
+        
+        // ✅ New: Explicit delete CartItem
+        Task<int> RemoveCartItemAsync(Guid cartId, Guid productId);
+        
+        // ✅ New: Clear all items from cart
+        Task<int> ClearCartItemsAsync(Guid cartId);
     }
 }

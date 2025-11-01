@@ -19,5 +19,14 @@ namespace eCommerceApp.Aplication.Services.Interfaces
 
         // GET /api/Address/list
         Task<ServiceResponse<IEnumerable<GetAddressDto>>> GetUserAddressesAsync(string userId);
+        
+        // ✅ GET /api/Address/{id}
+        Task<ServiceResponse<GetAddressDto>> GetAddressByIdAsync(string userId, Guid addressId);
+        
+        // ✅ New: PUT /api/Address/{id}/set-default
+        Task<ServiceResponse> SetDefaultAddressAsync(string userId, Guid addressId);
+        
+        // ✅ New: GET /api/Address/default
+        Task<ServiceResponse<GetAddressDto>> GetDefaultAddressAsync(string userId);
     }
 }

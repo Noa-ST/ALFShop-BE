@@ -1,5 +1,5 @@
 using eCommerceApp.Aplication.DTOs.Chat;
-using eCommerceApp.Application.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using System;
 using System.Collections.Generic;

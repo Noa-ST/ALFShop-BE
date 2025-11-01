@@ -10,6 +10,15 @@ namespace eCommerceApp.Domain.Repositories
         Task<Conversation> AddAsync(Conversation conversation);
         Task UpdateAsync(Conversation conversation);
         Task SaveChangesAsync();
+        
+        // ✅ New: Search conversations
+        Task<(List<Conversation> Conversations, int TotalCount)> SearchConversationsAsync(
+            string userId, 
+            string keyword, 
+            int skip = 0, 
+            int take = 20);
+        
+        // ✅ New: Get total count
+        Task<int> GetUserConversationsCountAsync(string userId);
     }
-}
 

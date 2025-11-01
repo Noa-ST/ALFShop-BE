@@ -35,6 +35,10 @@ namespace eCommerceApp.Domain.Entities
         public bool IsMutedByUser1 { get; set; } = false;
         public bool IsMutedByUser2 { get; set; } = false;
 
+        // ✅ New: Pin conversation cho từng user
+        public bool IsPinnedByUser1 { get; set; } = false;
+        public bool IsPinnedByUser2 { get; set; } = false;
+
         // Trạng thái khóa cuộc trò chuyện
         public bool IsBlocked { get; set; } = false;
         [MaxLength(450)]

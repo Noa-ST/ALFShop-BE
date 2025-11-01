@@ -4,82 +4,130 @@ using eCommerceApp.Aplication.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
+using Microsoft.Extensions.Hosting;
 
-[Authorize(Roles = "Admin,Seller,Customer")]
-[Route("api/Admin/[controller]")]
-[ApiController]
-public class GlobalCategoryController : ControllerBase
+namespace eCommerceApp.Host.Controllers
 {
-    private readonly IGlobalCategoryService _globalCategoryService;
-
-    public GlobalCategoryController(IGlobalCategoryService globalCategoryService)
+    [Route("api/[controller]")] // ✅ Fix: Route hợp lý hơn - /api/GlobalCategory
+    [ApiController]
+    public class GlobalCategoryController : ControllerBase
     {
-        _globalCategoryService = globalCategoryService;
-    }
+        private readonly IGlobalCategoryService _globalCategoryService;
 
-    [HttpPost("add")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(ServiceResponse<GetGlobalCategory>), (int)HttpStatusCode.OK)]
-    [ProducesResponseType((int)HttpStatusCode.BadRequest)]
-    public async Task<IActionResult> CreateCategory([FromBody] CreateGlobalCategory dto)
-    {
-        var response = await _globalCategoryService.CreateGlobalCategoryAsync(dto);
-
-        if (response.Succeeded)
+        public GlobalCategoryController(IGlobalCategoryService globalCategoryService)
         {
+            _globalCategoryService = globalCategoryService;
+        }
+
+        // ✅ Get category by ID
+        [HttpGet("{id:guid}")]
+        [ProducesResponseType(typeof(ServiceResponse<GetGlobalCategory>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetById(Guid id)
+        {
+            var response = await _globalCategoryService.GetGlobalCategoryByIdAsync(id);
+            return response.Succeeded
+                ? Ok(response)
+                : StatusCode((int)response.StatusCode, response);
+        }
+
+        // ✅ Get categories by parent ID (null = root categories)
+        [HttpGet("by-parent")]
+        [ProducesResponseType(typeof(ServiceResponse<IEnumerable<GetGlobalCategory>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetByParentId([FromQuery] Guid? parentId)
+        {
+            var response = await _globalCategoryService.GetCategoriesByParentIdAsync(parentId);
             return Ok(response);
         }
-        return BadRequest(response);
-    }
 
-    [HttpPut("update/{id:guid}")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(ServiceResponse<bool>), (int)HttpStatusCode.OK)]
-    [ProducesResponseType((int)HttpStatusCode.BadRequest)]
-    [ProducesResponseType((int)HttpStatusCode.NotFound)]
-    public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] UpdateGlobalCategory dto)
-    {
-        var response = await _globalCategoryService.UpdateGlobalCategoryAsync(id, dto);
-
-        if (response.Succeeded)
+        [HttpPost("add")]
+        [Authorize(Roles = "Admin")] // ✅ Fix: Chỉ Admin mới được tạo category
+        [ProducesResponseType(typeof(ServiceResponse<GetGlobalCategory>), (int)HttpStatusCode.OK)]
+        [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+        [ProducesResponseType((int)HttpStatusCode.Unauthorized)]
+        public async Task<IActionResult> CreateCategory([FromBody] CreateGlobalCategory dto)
         {
-            return Ok(response);
+            // ✅ Fix: Thêm ModelState validation
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = await _globalCategoryService.CreateGlobalCategoryAsync(dto);
+
+            return response.Succeeded
+                ? Ok(response)
+                : StatusCode((int)response.StatusCode, response);
         }
-        return BadRequest(response);
-    }
 
-    [HttpDelete("delete/{id:guid}")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(ServiceResponse<bool>), (int)HttpStatusCode.OK)]
-    [ProducesResponseType((int)HttpStatusCode.BadRequest)]
-    [ProducesResponseType((int)HttpStatusCode.NotFound)]
-    public async Task<IActionResult> DeleteCategory(Guid id)
-    {
-        var response = await _globalCategoryService.DeleteGlobalCategoryAsync(id);
-
-        if (response.Succeeded)
+        [HttpPut("update/{id:guid}")]
+        [Authorize(Roles = "Admin")] // ✅ Fix: Chỉ Admin mới được update
+        [ProducesResponseType(typeof(ServiceResponse<bool>), (int)HttpStatusCode.OK)]
+        [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+        [ProducesResponseType((int)HttpStatusCode.NotFound)]
+        [ProducesResponseType((int)HttpStatusCode.Unauthorized)]
+        public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] UpdateGlobalCategory dto)
         {
-            return Ok(response);
+            // ✅ Fix: Thêm ModelState validation
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = await _globalCategoryService.UpdateGlobalCategoryAsync(id, dto);
+
+            return response.Succeeded
+                ? Ok(response)
+                : StatusCode((int)response.StatusCode, response);
         }
-        return BadRequest(response);
-    }
 
-
-    [HttpGet("all")]
-    [ProducesResponseType(typeof(ServiceResponse<IEnumerable<GetGlobalCategory>>), (int)HttpStatusCode.OK)]
-    public async Task<IActionResult> GetAll()
-    {
-        try
+        [HttpDelete("delete/{id:guid}")]
+        [Authorize(Roles = "Admin")] // ✅ Fix: Chỉ Admin mới được xóa
+        [ProducesResponseType(typeof(ServiceResponse<bool>), (int)HttpStatusCode.OK)]
+        [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+        [ProducesResponseType((int)HttpStatusCode.NotFound)]
+        [ProducesResponseType((int)HttpStatusCode.Unauthorized)]
+        public async Task<IActionResult> DeleteCategory(Guid id)
         {
-            var response = await _globalCategoryService.GetAllGlobalCategoriesAsync(includeChildren: true);
-            return Ok(response);
+            var response = await _globalCategoryService.DeleteGlobalCategoryAsync(id);
+
+            return response.Succeeded
+                ? Ok(response)
+                : StatusCode((int)response.StatusCode, response);
         }
-        catch (Exception ex)
+
+
+        [HttpGet("all")]
+        [ProducesResponseType(typeof(ServiceResponse<IEnumerable<GetGlobalCategory>>), (int)HttpStatusCode.OK)]
+        public async Task<IActionResult> GetAll([FromQuery] bool includeChildren = true)
         {
-            // In ra console để xem lỗi trong Terminal / Output
-            Console.WriteLine($"[ERROR] {ex.Message}");
-            Console.WriteLine(ex.StackTrace);
-            return StatusCode(500, $"Server Error: {ex.Message}");
+            try
+            {
+                var response = await _globalCategoryService.GetAllGlobalCategoriesAsync(includeChildren);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                // ✅ Fix: Chỉ expose StackTrace trong Development
+                var errorDetail = HttpContext.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment()
+                    ? ex.StackTrace
+                    : null;
+
+                return StatusCode(500, new
+                {
+                    message = "Internal server error occurred.",
+                    detail = errorDetail
+                });
+            }
+        }
+
+        // ✅ New: Statistics endpoint for Admin dashboard
+        [HttpGet("admin/statistics")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(typeof(ServiceResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> GetStatistics()
+        {
+            var response = await _globalCategoryService.GetStatisticsAsync();
+            return response.Succeeded
+                ? Ok(response)
+                : StatusCode((int)response.StatusCode, response);
         }
     }
 }

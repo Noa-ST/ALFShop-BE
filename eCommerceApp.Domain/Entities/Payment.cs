@@ -19,9 +19,14 @@ namespace eCommerceApp.Domain.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal Amount { get; set; }
 
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal RefundedAmount { get; set; } = 0; // ✅ New: Track tổng số tiền đã refund
+
         public string? TransactionId { get; set; } // ID giao dịch từ cổng thanh toán (VNPAY, Momo...)
         
         public int? OrderCode { get; set; } // OrderCode từ PayOS (int) để map với OrderId (Guid)
+        
+        public DateTime? PaymentLinkExpiredAt { get; set; } // ✅ New: Thời gian hết hạn payment link
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow; // Cần cập nhật khi trạng thái thay đổi

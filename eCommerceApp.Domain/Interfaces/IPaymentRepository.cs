@@ -1,4 +1,5 @@
 ﻿using eCommerceApp.Domain.Entities;
+using eCommerceApp.Domain.Enums;
 
 namespace eCommerceApp.Domain.Repositories
 {
@@ -13,5 +14,15 @@ namespace eCommerceApp.Domain.Repositories
         Task<Payment?> GetByOrderCodeAsync(int orderCode);
         Task AddHistoryAsync(PaymentHistory history);
         Task<IEnumerable<PaymentHistory>> GetHistoryByPaymentIdAsync(Guid paymentId);
+        
+        // ✅ New: Methods for unique OrderCode generation
+        Task<int> GenerateUniqueOrderCodeAsync();
+        
+        // ✅ New: Methods for statistics and filtering
+        Task<int> GetTotalCountAsync();
+        Task<int> GetCountByStatusAsync(PaymentStatus status);
+        Task<decimal> GetTotalRevenueAsync(DateTime? startDate = null, DateTime? endDate = null);
+        Task<Dictionary<PaymentStatus, int>> GetPaymentsByStatusAsync();
+        Task<List<(Guid OrderId, decimal Amount, DateTime CreatedAt)>> GetExpiredPaymentLinksAsync();
     }
 }

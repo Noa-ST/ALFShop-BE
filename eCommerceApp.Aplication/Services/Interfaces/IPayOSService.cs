@@ -1,6 +1,6 @@
 using eCommerceApp.Aplication.DTOs.Payment;
 
-namespace eCommerceApp.Application.Services.Interfaces
+namespace eCommerceApp.Aplication.Services.Interfaces
 {
     public interface IPayOSService
     {

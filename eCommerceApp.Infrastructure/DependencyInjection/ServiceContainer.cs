@@ -1,5 +1,5 @@
 ﻿using eCommerceApp.Aplication.Services.Interfaces.Logging;
-using eCommerceApp.Application.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces;
 using eCommerceApp.Domain.Interfaces.Authentication;

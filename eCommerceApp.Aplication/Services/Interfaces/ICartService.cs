@@ -18,5 +18,8 @@ namespace eCommerceApp.Aplication.Services.Interfaces
 
         // GET /api/Cart
         Task<ServiceResponse<GetCartDto>> GetCurrentCartAsync(string userId);
+        
+        // ✅ New: Clear Cart
+        Task<ServiceResponse> ClearCartAsync(string userId);
     }
 }

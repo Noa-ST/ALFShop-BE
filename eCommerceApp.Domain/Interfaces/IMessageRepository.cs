@@ -11,6 +11,16 @@ namespace eCommerceApp.Domain.Repositories
         Task UpdateAsync(Message message);
         Task<int> CountUnreadAsync(Guid conversationId, string userId);
         Task SaveChangesAsync();
+        
+        // ✅ New: Search messages
+        Task<(List<Message> Messages, int TotalCount)> SearchMessagesAsync(
+            Guid conversationId, 
+            string keyword, 
+            int skip = 0, 
+            int take = 50);
+        
+        // ✅ New: Get total unread count for user
+        Task<int> GetTotalUnreadCountAsync(string userId);
     }
 }
 

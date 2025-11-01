@@ -1,15 +1,19 @@
 using AutoMapper;
 using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Chat;
-using eCommerceApp.Application.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Interfaces;
 using eCommerceApp.Domain.Repositories;
+using eCommerceApp.Infrastructure.Data;
 using System.Collections.Generic;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Net;
+using Microsoft.AspNetCore.Identity;
+using eCommerceApp.Domain.Entities.Identity;
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -21,6 +25,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IProductRepository _productRepository;
         private readonly IChatRealtimeNotifier _chatNotifier;
         private readonly IMapper _mapper;
+        private readonly AppDbContext _dbContext; // ✅ New: For transaction support
+        private readonly UserManager<User> _userManager; // ✅ New: For user validation
 
         public ConversationService(
             IConversationRepository conversationRepository,
@@ -28,7 +34,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
             IOrderRepository orderRepository,
             IProductRepository productRepository,
             IChatRealtimeNotifier chatNotifier,
-            IMapper mapper)
+            IMapper mapper,
+            AppDbContext dbContext, // ✅ New: Inject AppDbContext
+            UserManager<User> userManager) // ✅ New: Inject UserManager
         {
             _conversationRepository = conversationRepository;
             _messageRepository = messageRepository;
@@ -36,6 +44,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _productRepository = productRepository;
             _chatNotifier = chatNotifier;
             _mapper = mapper;
+            _dbContext = dbContext;
+            _userManager = userManager;
         }
 
         public async Task<ServiceResponse<ConversationSummaryDto>> CreateConversationAsync(string currentUserId, CreateConversationRequest request)
@@ -48,6 +58,13 @@ namespace eCommerceApp.Aplication.Services.Implementations
             if (request.TargetUserId == currentUserId)
             {
                 return ServiceResponse<ConversationSummaryDto>.Fail("Cannot create conversation with yourself.");
+            }
+
+            // ✅ New: Validate TargetUserId exists
+            var targetUser = await _userManager.FindByIdAsync(request.TargetUserId);
+            if (targetUser == null || targetUser.IsDeleted)
+            {
+                return ServiceResponse<ConversationSummaryDto>.Fail("Target user not found.");
             }
 
             var existing = await _conversationRepository.GetBetweenUsersAsync(currentUserId, request.TargetUserId);
@@ -74,6 +91,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
         public async Task<ServiceResponse<ConversationDetailDto>> GetConversationAsync(string currentUserId, Guid conversationId, int messagePage = 1, int pageSize = 50)
         {
+            // ✅ Fix: Validate page >= 1
+            if (messagePage < 1) messagePage = 1;
+
             var conversation = await _conversationRepository.GetByIdAsync(conversationId);
             if (conversation == null || conversation.IsDeleted)
             {
@@ -99,92 +119,150 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
         public async Task<ServiceResponse<List<ConversationSummaryDto>>> GetConversationsAsync(string currentUserId, int page = 1, int pageSize = 20)
         {
+            // ✅ Fix: Validate page >= 1
+            if (page < 1) page = 1;
             pageSize = NormalizePageSize(pageSize);
             var skip = Math.Max(0, (page - 1) * pageSize);
 
             var conversations = await _conversationRepository.GetUserConversationsAsync(currentUserId, skip, pageSize);
+            var totalCount = await _conversationRepository.GetUserConversationsCountAsync(currentUserId);
 
             var results = conversations
                 .Select(conversation => MapConversationSummary(conversation, currentUserId))
                 .ToList();
 
-            return ServiceResponse<List<ConversationSummaryDto>>.Success(results);
+            var pagedResult = new PagedResult<ConversationSummaryDto>
+            {
+                Data = results,
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount
+            };
+
+            return ServiceResponse<PagedResult<ConversationSummaryDto>>.Success(pagedResult);
         }
 
         public async Task<ServiceResponse<bool>> MarkMessagesReadAsync(string currentUserId, Guid conversationId, MarkMessagesReadRequest request)
         {
-            var conversation = await _conversationRepository.GetByIdAsync(conversationId);
-            if (conversation == null)
+            // ✅ Fix: Wrap trong transaction để tránh race condition
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                return ServiceResponse<bool>.Fail("Conversation not found.");
-            }
+                var conversation = await _conversationRepository.GetByIdAsync(conversationId);
+                if (conversation == null)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<bool>.Fail("Conversation not found.");
+                }
 
-            if (!IsParticipant(conversation, currentUserId))
+                if (!IsParticipant(conversation, currentUserId))
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<bool>.Fail("You are not a participant of this conversation.");
+                }
+
+                var upTo = request.UpTo ?? DateTime.UtcNow;
+                var unreadMessages = await _messageRepository.GetUnreadMessagesAsync(conversationId, currentUserId, upTo);
+
+                if (unreadMessages.Count == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<bool>.Success(true, "No unread messages to update.");
+                }
+
+                foreach (var message in unreadMessages)
+                {
+                    message.IsRead = true;
+                    message.ReadAt = DateTime.UtcNow;
+                    message.UpdatedAt = DateTime.UtcNow;
+                }
+
+                await _messageRepository.SaveChangesAsync();
+
+                // ✅ Fix: Re-calculate unread count để tránh race condition
+                var isUser1 = conversation.User1Id == currentUserId;
+                var actualUnreadCount = await _messageRepository.CountUnreadAsync(conversationId, currentUserId);
+                
+                if (isUser1)
+                {
+                    conversation.User1UnreadCount = actualUnreadCount;
+                }
+                else
+                {
+                    conversation.User2UnreadCount = actualUnreadCount;
+                }
+
+                conversation.UpdatedAt = DateTime.UtcNow;
+                await _conversationRepository.UpdateAsync(conversation);
+
+                await transaction.CommitAsync();
+
+                await _chatNotifier.BroadcastMessagesReadAsync(
+                    conversationId,
+                    currentUserId,
+                    conversation.User1UnreadCount,
+                    conversation.User2UnreadCount,
+                    unreadMessages.Select(m => m.Id).ToList());
+
+                return ServiceResponse<bool>.Success(true, "Marked messages as read.");
+            }
+            catch (Exception ex)
             {
-                return ServiceResponse<bool>.Fail("You are not a participant of this conversation.");
+                await _dbContext.Database.CurrentTransaction?.RollbackAsync();
+                return ServiceResponse<bool>.Fail($"Error marking messages as read: {ex.Message}");
             }
-
-            var upTo = request.UpTo ?? DateTime.UtcNow;
-            var unreadMessages = await _messageRepository.GetUnreadMessagesAsync(conversationId, currentUserId, upTo);
-
-            if (unreadMessages.Count == 0)
-            {
-                return ServiceResponse<bool>.Success(true, "No unread messages to update.");
-            }
-
-            foreach (var message in unreadMessages)
-            {
-                message.IsRead = true;
-                message.ReadAt = DateTime.UtcNow;
-                message.UpdatedAt = DateTime.UtcNow;
-            }
-
-            await _messageRepository.SaveChangesAsync();
-
-            if (conversation.User1Id == currentUserId)
-            {
-                conversation.User1UnreadCount = Math.Max(0, conversation.User1UnreadCount - unreadMessages.Count);
-            }
-            else
-            {
-                conversation.User2UnreadCount = Math.Max(0, conversation.User2UnreadCount - unreadMessages.Count);
-            }
-
-            conversation.UpdatedAt = DateTime.UtcNow;
-            await _conversationRepository.UpdateAsync(conversation);
-
-            await _chatNotifier.BroadcastMessagesReadAsync(
-                conversationId,
-                currentUserId,
-                conversation.User1UnreadCount,
-                conversation.User2UnreadCount,
-                unreadMessages.Select(m => m.Id).ToList());
-
-            return ServiceResponse<bool>.Success(true, "Marked messages as read.");
         }
 
         public async Task<ServiceResponse<MessageDto>> SendMessageAsync(string currentUserId, Guid conversationId, SendMessageRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.Content) && string.IsNullOrWhiteSpace(request.AttachmentUrl))
+            // ✅ Fix: Wrap trong transaction để tránh race condition
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
             {
-                return ServiceResponse<MessageDto>.Fail("Message content or attachment is required.");
-            }
+                // ✅ New: Validate AttachmentUrl (file size, type, URL format)
+                if (!string.IsNullOrWhiteSpace(request.AttachmentUrl))
+                {
+                    if (!Uri.TryCreate(request.AttachmentUrl, UriKind.Absolute, out var uri))
+                    {
+                        await transaction.RollbackAsync();
+                        return ServiceResponse<MessageDto>.Fail("Invalid attachment URL format.");
+                    }
 
-            var conversation = await _conversationRepository.GetByIdAsync(conversationId);
-            if (conversation == null)
-            {
-                return ServiceResponse<MessageDto>.Fail("Conversation not found.");
-            }
+                    // Check URL scheme (http/https only)
+                    if (uri.Scheme != "http" && uri.Scheme != "https")
+                    {
+                        await transaction.RollbackAsync();
+                        return ServiceResponse<MessageDto>.Fail("Attachment URL must use http or https protocol.");
+                    }
 
-            if (!IsParticipant(conversation, currentUserId))
-            {
-                return ServiceResponse<MessageDto>.Fail("You are not a participant of this conversation.");
-            }
+                    // Note: File size validation should be done at upload time, not here
+                    // Metadata có thể chứa file size info để validate
+                }
 
-            if (conversation.IsBlocked && conversation.BlockedByUserId != currentUserId)
-            {
-                return ServiceResponse<MessageDto>.Fail("Conversation is blocked.");
-            }
+                if (string.IsNullOrWhiteSpace(request.Content) && string.IsNullOrWhiteSpace(request.AttachmentUrl))
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<MessageDto>.Fail("Message content or attachment is required.");
+                }
+
+                var conversation = await _conversationRepository.GetByIdAsync(conversationId);
+                if (conversation == null)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<MessageDto>.Fail("Conversation not found.");
+                }
+
+                if (!IsParticipant(conversation, currentUserId))
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<MessageDto>.Fail("You are not a participant of this conversation.");
+                }
+
+                if (conversation.IsBlocked && conversation.BlockedByUserId != currentUserId)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<MessageDto>.Fail("Conversation is blocked.");
+                }
 
             Message? replyTarget = null;
             if (request.ReplyToMessageId.HasValue)
@@ -261,20 +339,28 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 }
             }
 
-            await _messageRepository.AddAsync(message);
+                await _messageRepository.AddAsync(message);
 
-            UpdateConversationOnNewMessage(conversation, message, currentUserId);
-            await _conversationRepository.UpdateAsync(conversation);
+                UpdateConversationOnNewMessage(conversation, message, currentUserId);
+                await _conversationRepository.UpdateAsync(conversation);
 
-            var messageDto = MapMessage(message);
+                await transaction.CommitAsync();
 
-            var senderSummary = MapConversationSummary(conversation, currentUserId);
-            var receiverId = conversation.User1Id == currentUserId ? conversation.User2Id : conversation.User1Id;
-            var receiverSummary = MapConversationSummary(conversation, receiverId);
+                var messageDto = MapMessage(message);
 
-            await _chatNotifier.BroadcastMessageAsync(messageDto, senderSummary, receiverSummary);
+                var senderSummary = MapConversationSummary(conversation, currentUserId);
+                var receiverId = conversation.User1Id == currentUserId ? conversation.User2Id : conversation.User1Id;
+                var receiverSummary = MapConversationSummary(conversation, receiverId);
 
-            return ServiceResponse<MessageDto>.Success(messageDto, "Message sent successfully.");
+                await _chatNotifier.BroadcastMessageAsync(messageDto, senderSummary, receiverSummary);
+
+                return ServiceResponse<MessageDto>.Success(messageDto, "Message sent successfully.");
+            }
+            catch (Exception ex)
+            {
+                await _dbContext.Database.CurrentTransaction?.RollbackAsync();
+                return ServiceResponse<MessageDto>.Fail($"Error sending message: {ex.Message}");
+            }
         }
 
         public async Task<ServiceResponse<bool>> UpdatePreferencesAsync(string currentUserId, Guid conversationId, UpdateConversationPreferenceRequest request)
@@ -308,6 +394,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     conversation.IsMutedByUser2 = request.IsMuted.Value;
             }
 
+            // ✅ New: Pin conversation
+            if (request.IsPinned.HasValue)
+            {
+                if (isUser1)
+                    conversation.IsPinnedByUser1 = request.IsPinned.Value;
+                else
+                    conversation.IsPinnedByUser2 = request.IsPinned.Value;
+            }
+
             if (request.IsBlocked.HasValue && request.IsBlocked.Value != conversation.IsBlocked)
             {
                 conversation.IsBlocked = request.IsBlocked.Value;
@@ -337,6 +432,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             dto.UnreadCount = isUser1 ? conversation.User1UnreadCount : conversation.User2UnreadCount;
             dto.IsMuted = isUser1 ? conversation.IsMutedByUser1 : conversation.IsMutedByUser2;
             dto.IsArchived = isUser1 ? conversation.IsArchivedByUser1 : conversation.IsArchivedByUser2;
+            dto.IsPinned = isUser1 ? conversation.IsPinnedByUser1 : conversation.IsPinnedByUser2; // ✅ New: Pin status
             dto.IsBlocked = conversation.IsBlocked;
             dto.LastMessageAt = conversation.LastMessageAt;
             dto.LastMessageContent = conversation.LastMessageContent;
@@ -449,6 +545,275 @@ namespace eCommerceApp.Aplication.Services.Implementations
             {
                 conversation.User2UnreadCount = 0;
                 conversation.User1UnreadCount += 1;
+            }
+        }
+
+        // ✅ New: Edit Message
+        public async Task<ServiceResponse<MessageDto>> EditMessageAsync(string currentUserId, Guid messageId, EditMessageRequest request)
+        {
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                var message = await _messageRepository.GetByIdAsync(messageId);
+                if (message == null)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<MessageDto>.Fail("Message not found.");
+                }
+
+                // Validate ownership - chỉ sender mới có thể edit
+                if (message.SenderId != currentUserId)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<MessageDto>.Fail("You can only edit your own messages.");
+                }
+
+                // Validate conversation exists và user là participant
+                var conversation = await _conversationRepository.GetByIdAsync(message.ConversationId);
+                if (conversation == null || !IsParticipant(conversation, currentUserId))
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<MessageDto>.Fail("Conversation not found or access denied.");
+                }
+
+                // Validate content không rỗng
+                if (string.IsNullOrWhiteSpace(request.Content) && string.IsNullOrWhiteSpace(request.AttachmentUrl))
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<MessageDto>.Fail("Message content or attachment is required.");
+                }
+
+                // Validate AttachmentUrl nếu có
+                if (!string.IsNullOrWhiteSpace(request.AttachmentUrl))
+                {
+                    if (!Uri.TryCreate(request.AttachmentUrl, UriKind.Absolute, out var uri) ||
+                        (uri.Scheme != "http" && uri.Scheme != "https"))
+                    {
+                        await transaction.RollbackAsync();
+                        return ServiceResponse<MessageDto>.Fail("Invalid attachment URL format.");
+                    }
+                }
+
+                // Update message
+                message.Content = request.Content?.Trim() ?? string.Empty;
+                message.AttachmentUrl = request.AttachmentUrl;
+                message.Metadata = request.Metadata;
+                message.IsEdited = true;
+                message.EditedAt = DateTime.UtcNow;
+                message.UpdatedAt = DateTime.UtcNow;
+
+                await _messageRepository.UpdateAsync(message);
+
+                // Update conversation last message content nếu đây là message cuối cùng
+                if (conversation.LastMessageSenderId == currentUserId && 
+                    conversation.LastMessageAt <= message.CreatedAt)
+                {
+                    var preview = string.IsNullOrWhiteSpace(message.Content) 
+                        ? "[Attachment]" 
+                        : message.Content.Length > 100 
+                            ? message.Content.Substring(0, 100) + "..." 
+                            : message.Content;
+                    conversation.LastMessageContent = preview;
+                    conversation.UpdatedAt = DateTime.UtcNow;
+                    await _conversationRepository.UpdateAsync(conversation);
+                }
+
+                await transaction.CommitAsync();
+
+                var messageDto = MapMessage(message);
+                return ServiceResponse<MessageDto>.Success(messageDto, "Message edited successfully.");
+            }
+            catch (Exception ex)
+            {
+                await _dbContext.Database.CurrentTransaction?.RollbackAsync();
+                return ServiceResponse<MessageDto>.Fail($"Error editing message: {ex.Message}");
+            }
+        }
+
+        // ✅ New: Delete Message
+        public async Task<ServiceResponse<bool>> DeleteMessageAsync(string currentUserId, Guid messageId)
+        {
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                var message = await _messageRepository.GetByIdAsync(messageId);
+                if (message == null)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<bool>.Fail("Message not found.");
+                }
+
+                // Validate ownership - chỉ sender mới có thể delete
+                if (message.SenderId != currentUserId)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<bool>.Fail("You can only delete your own messages.");
+                }
+
+                // Validate conversation exists
+                var conversation = await _conversationRepository.GetByIdAsync(message.ConversationId);
+                if (conversation == null)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<bool>.Fail("Conversation not found.");
+                }
+
+                // Soft delete message
+                message.IsDeleted = true;
+                message.DeletedAt = DateTime.UtcNow;
+                message.UpdatedAt = DateTime.UtcNow;
+
+                await _messageRepository.UpdateAsync(message);
+
+                // Update conversation last message nếu đây là message cuối cùng
+                if (conversation.LastMessageSenderId == currentUserId && 
+                    conversation.LastMessageAt <= message.CreatedAt)
+                {
+                    // Tìm message cuối cùng không bị xóa
+                    var lastMessage = await _messageRepository.GetMessagesAsync(message.ConversationId, 0, 1);
+                    if (lastMessage.Count > 0)
+                    {
+                        var lastMsg = lastMessage[0];
+                        conversation.LastMessageAt = lastMsg.CreatedAt;
+                        conversation.LastMessageContent = lastMsg.Content?.Length > 100 
+                            ? lastMsg.Content.Substring(0, 100) + "..." 
+                            : lastMsg.Content ?? "[Message]";
+                        conversation.LastMessageSenderId = lastMsg.SenderId;
+                    }
+                    else
+                    {
+                        conversation.LastMessageContent = null;
+                        conversation.LastMessageSenderId = null;
+                    }
+                    conversation.UpdatedAt = DateTime.UtcNow;
+                    await _conversationRepository.UpdateAsync(conversation);
+                }
+
+                await transaction.CommitAsync();
+
+                return ServiceResponse<bool>.Success(true, "Message deleted successfully.");
+            }
+            catch (Exception ex)
+            {
+                await _dbContext.Database.CurrentTransaction?.RollbackAsync();
+                return ServiceResponse<bool>.Fail($"Error deleting message: {ex.Message}");
+            }
+        }
+
+        // ✅ New: Delete Conversation
+        public async Task<ServiceResponse<bool>> DeleteConversationAsync(string currentUserId, Guid conversationId)
+        {
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                var conversation = await _conversationRepository.GetByIdAsync(conversationId);
+                if (conversation == null)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<bool>.Fail("Conversation not found.");
+                }
+
+                if (!IsParticipant(conversation, currentUserId))
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResponse<bool>.Fail("You are not a participant of this conversation.");
+                }
+
+                // Soft delete conversation
+                conversation.IsDeleted = true;
+                conversation.UpdatedAt = DateTime.UtcNow;
+
+                await _conversationRepository.UpdateAsync(conversation);
+
+                await transaction.CommitAsync();
+
+                return ServiceResponse<bool>.Success(true, "Conversation deleted successfully.");
+            }
+            catch (Exception ex)
+            {
+                await _dbContext.Database.CurrentTransaction?.RollbackAsync();
+                return ServiceResponse<bool>.Fail($"Error deleting conversation: {ex.Message}");
+            }
+        }
+
+        // ✅ New: Search Messages
+        public async Task<ServiceResponse<PagedResult<MessageDto>>> SearchMessagesAsync(string currentUserId, Guid conversationId, string keyword, int page = 1, int pageSize = 50)
+        {
+            if (string.IsNullOrWhiteSpace(keyword))
+            {
+                return ServiceResponse<PagedResult<MessageDto>>.Fail("Keyword is required.");
+            }
+
+            if (page < 1) page = 1;
+            pageSize = NormalizePageSize(pageSize);
+            var skip = Math.Max(0, (page - 1) * pageSize);
+
+            // Validate conversation và ownership
+            var conversation = await _conversationRepository.GetByIdAsync(conversationId);
+            if (conversation == null)
+            {
+                return ServiceResponse<PagedResult<MessageDto>>.Fail("Conversation not found.");
+            }
+
+            if (!IsParticipant(conversation, currentUserId))
+            {
+                return ServiceResponse<PagedResult<MessageDto>>.Fail("You are not a participant of this conversation.");
+            }
+
+            var (messages, totalCount) = await _messageRepository.SearchMessagesAsync(conversationId, keyword, skip, pageSize);
+            var messageDtos = MapMessages(messages).ToList();
+
+            var pagedResult = new PagedResult<MessageDto>
+            {
+                Data = messageDtos,
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount
+            };
+
+            return ServiceResponse<PagedResult<MessageDto>>.Success(pagedResult);
+        }
+
+        // ✅ New: Search Conversations
+        public async Task<ServiceResponse<PagedResult<ConversationSummaryDto>>> SearchConversationsAsync(string currentUserId, string keyword, int page = 1, int pageSize = 20)
+        {
+            if (string.IsNullOrWhiteSpace(keyword))
+            {
+                return ServiceResponse<PagedResult<ConversationSummaryDto>>.Fail("Keyword is required.");
+            }
+
+            if (page < 1) page = 1;
+            pageSize = NormalizePageSize(pageSize);
+            var skip = Math.Max(0, (page - 1) * pageSize);
+
+            var (conversations, totalCount) = await _conversationRepository.SearchConversationsAsync(currentUserId, keyword, skip, pageSize);
+
+            var results = conversations
+                .Select(conversation => MapConversationSummary(conversation, currentUserId))
+                .ToList();
+
+            var pagedResult = new PagedResult<ConversationSummaryDto>
+            {
+                Data = results,
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount
+            };
+
+            return ServiceResponse<PagedResult<ConversationSummaryDto>>.Success(pagedResult);
+        }
+
+        // ✅ New: Get Total Unread Count
+        public async Task<ServiceResponse<int>> GetTotalUnreadCountAsync(string currentUserId)
+        {
+            try
+            {
+                var totalUnread = await _messageRepository.GetTotalUnreadCountAsync(currentUserId);
+                return ServiceResponse<int>.Success(totalUnread, "Total unread count retrieved successfully.");
+            }
+            catch (Exception ex)
+            {
+                return ServiceResponse<int>.Fail($"Error getting total unread count: {ex.Message}");
             }
         }
     }

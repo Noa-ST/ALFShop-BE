@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using eCommerceApp.Application.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Aplication.DTOs.Payment;
 using Microsoft.Extensions.Configuration;
 
-namespace eCommerceApp.Application.Services.Implementations
+namespace eCommerceApp.Aplication.Services.Implementations
 {
     public class PayOSService : IPayOSService
     {

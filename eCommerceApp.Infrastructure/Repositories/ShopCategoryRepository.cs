@@ -49,5 +49,78 @@ namespace eCommerceApp.Infrastructure.Repositories
             return await _context.ShopCategories
                 .FirstOrDefaultAsync(sc => sc.Id == id && !sc.IsDeleted);
         }
+
+        // ✅ New: Check duplicate name in same shop and level
+        public async Task<bool> ExistsByNameInSameShopAndLevelAsync(string name, Guid shopId, Guid? parentId, Guid? excludeId = null)
+        {
+            var query = _context.ShopCategories
+                .Where(sc => !sc.IsDeleted 
+                    && sc.ShopId == shopId
+                    && sc.Name.ToLower() == name.ToLower() 
+                    && sc.ParentId == parentId);
+
+            if (excludeId.HasValue)
+            {
+                query = query.Where(sc => sc.Id != excludeId.Value);
+            }
+
+            return await query.AnyAsync();
+        }
+
+        // ✅ New: Check for circular reference
+        public async Task<bool> HasCircularReferenceAsync(Guid categoryId, Guid? newParentId)
+        {
+            if (!newParentId.HasValue)
+                return false; // No parent = no circular reference
+
+            // Kiểm tra xem newParentId có phải là descendant của categoryId không
+            var currentId = newParentId.Value;
+            var visited = new HashSet<Guid> { categoryId }; // Tránh infinite loop
+
+            while (currentId != Guid.Empty)
+            {
+                if (visited.Contains(currentId))
+                    return true; // Circular reference detected
+
+                visited.Add(currentId);
+
+                var parent = await _context.ShopCategories
+                    .Where(sc => sc.Id == currentId && !sc.IsDeleted)
+                    .Select(sc => sc.ParentId)
+                    .FirstOrDefaultAsync();
+
+                if (!parent.HasValue)
+                    break; // Reached root
+
+                currentId = parent.Value;
+            }
+
+            return false;
+        }
+
+        // ✅ New: Count children of a category
+        public async Task<int> CountChildrenAsync(Guid categoryId)
+        {
+            return await _context.ShopCategories
+                .CountAsync(sc => sc.ParentId == categoryId && !sc.IsDeleted);
+        }
+
+        // ✅ New: Get category by ID with children (for update)
+        public async Task<ShopCategory?> GetByIdWithChildrenAsync(Guid id)
+        {
+            var category = await _context.ShopCategories
+                .FirstOrDefaultAsync(sc => sc.Id == id && !sc.IsDeleted);
+            
+            if (category == null)
+                return null;
+
+            // Load children manually
+            var children = await _context.ShopCategories
+                .Where(sc => sc.ParentId == id && !sc.IsDeleted)
+                .ToListAsync();
+            
+            category.Children = children;
+            return category;
+        }
     }
 }

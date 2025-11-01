@@ -5,8 +5,6 @@ using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Aplication.Services.Interfaces.Authentication;
 using eCommerceApp.Aplication.Validations;
 using eCommerceApp.Aplication.Validations.Authentication;
-using eCommerceApp.Application.Services.Implementations;
-using eCommerceApp.Application.Services.Interfaces;
 using eCommerceApp.Domain.Entities;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -33,11 +31,10 @@ namespace eCommerceApp.Aplication.DependencyInjection
 
             services.AddScoped<IOrderService, OrderService>();
             services.AddScoped<IPaymentService, PaymentService>();
-            // services.AddScoped<IConversationService, ConversationService>(); // TODO: Uncomment khi có ConversationService
+            services.AddScoped<IConversationService, ConversationService>();
 
-            // PayOS Service
+            // PayOS Service - Đăng ký với HttpClient để hỗ trợ HTTP calls
             services.AddHttpClient<IPayOSService, PayOSService>();
-            services.AddScoped<IPayOSService, PayOSService>();
 
             return services;
         }

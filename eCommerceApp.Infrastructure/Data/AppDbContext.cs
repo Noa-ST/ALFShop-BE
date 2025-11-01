@@ -88,6 +88,10 @@ namespace eCommerceApp.Infrastructure.Data
                 .Property(p => p.Amount)
                 .HasColumnType("decimal(18,2)");
 
+            modelBuilder.Entity<Payment>()
+                .Property(p => p.RefundedAmount)
+                .HasColumnType("decimal(18,2)");
+
             // ---------- Relationships ----------
             // User - Shop (Seller)
             modelBuilder.Entity<Shop>()
@@ -186,6 +190,16 @@ namespace eCommerceApp.Infrastructure.Data
                 .WithOne()
                 .HasForeignKey<Payment>(p => p.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // ✅ Fix: Unique constraint cho OrderId để đảm bảo 1 Order chỉ có 1 Payment
+            modelBuilder.Entity<Payment>()
+                .HasIndex(p => p.OrderId)
+                .IsUnique();
+
+            // ✅ Fix: Index cho OrderCode để tìm nhanh khi webhook đến
+            modelBuilder.Entity<Payment>()
+                .HasIndex(p => p.OrderCode)
+                .IsUnique(false);
 
             // Payment - PaymentHistory (1:Many)
             modelBuilder.Entity<PaymentHistory>()

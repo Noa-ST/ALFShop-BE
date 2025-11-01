@@ -8,6 +8,9 @@ using eCommerceApp.Domain.Interfaces;
 using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using eCommerceApp.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -19,6 +22,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
         , IGlobalCategoryRepository globalCategoryRepository
         , IWebHostEnvironment webHostEnvironment
         , IHttpContextAccessor httpContextAccessor
+        , AppDbContext dbContext
     ) : IProductService
     {
         public async Task<ServiceResponse> RejectProductAsync(Guid productId, string? rejectionReason)
@@ -86,15 +90,22 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 ? ServiceResponse.Success("Duyệt sản phẩm thành công.")
                 : ServiceResponse.Fail("Lỗi cập nhật CSDL khi duyệt sản phẩm.", HttpStatusCode.InternalServerError);
         }
-        public async Task<ServiceResponse> AddAsync(CreateProduct product)
+        public async Task<ServiceResponse> AddAsync(CreateProduct product, string userId)
         {
             try
             {
-                // 0. Validate FK trước khi lưu để tránh lỗi 500
+                // ✅ Fix: Validate Shop ownership
                 var shop = await shopRepository.GetByIdAsync(product.ShopId);
                 if (shop == null || shop.IsDeleted)
                 {
-                    return new ServiceResponse(false, "ShopId không hợp lệ hoặc shop đã bị xoá.");
+                    return ServiceResponse.Fail("ShopId không hợp lệ hoặc shop đã bị xoá.", HttpStatusCode.BadRequest);
+                }
+
+                // ✅ Kiểm tra shop thuộc về user hiện tại (trừ Admin)
+                var isAdmin = httpContextAccessor.HttpContext?.User.IsInRole("Admin") ?? false;
+                if (!isAdmin && shop.SellerId != userId)
+                {
+                    return ServiceResponse.Fail("Bạn không có quyền tạo sản phẩm cho shop này.", HttpStatusCode.Forbidden);
                 }
 
                 var category = await globalCategoryRepository.GetByIdAsync(product.CategoryId);
@@ -255,54 +266,105 @@ namespace eCommerceApp.Aplication.Services.Implementations
         }
 
 
-        public async Task<ServiceResponse> UpdateAsync(Guid id, UpdateProduct product)
+        public async Task<ServiceResponse> UpdateAsync(Guid id, UpdateProduct product, string userId)
         {
             var existing = await productRepo.GetDetailByIdAsync(id);
             if (existing == null || existing.IsDeleted)
-                return new ServiceResponse(false, "Product not found.");
+                return ServiceResponse.Fail("Product not found.", HttpStatusCode.NotFound);
+
+            // ✅ Fix: Validate Shop ownership
+            var shop = await shopRepository.GetByIdAsync(existing.ShopId);
+            if (shop == null)
+                return ServiceResponse.Fail("Shop not found.", HttpStatusCode.NotFound);
+
+            var isAdmin = httpContextAccessor.HttpContext?.User.IsInRole("Admin") ?? false;
+            if (!isAdmin && shop.SellerId != userId)
+            {
+                return ServiceResponse.Fail("Bạn không có quyền cập nhật sản phẩm này.", HttpStatusCode.Forbidden);
+            }
+
+            // ✅ Validate CategoryId nếu có thay đổi
+            if (product.CategoryId != Guid.Empty && product.CategoryId != existing.GlobalCategoryId)
+            {
+                var category = await globalCategoryRepository.GetByIdAsync(product.CategoryId);
+                if (category == null)
+                    return ServiceResponse.Fail("CategoryId không tồn tại.", HttpStatusCode.BadRequest);
+            }
 
             mapper.Map(product, existing);
             existing.UpdatedAt = DateTime.UtcNow;
 
-            int result = await productRepo.UpdateAsync(existing);
-
-            // Cập nhật ảnh nếu có
-            if (product.ImageUrls != null && product.ImageUrls.Any())
+            // ✅ Fix: Sử dụng transaction để đảm bảo atomicity khi update images
+            using var transaction = await dbContext.Database.BeginTransactionAsync();
+            try
             {
-                if (existing.Images != null) 
-                {
-                    // Xóa các ảnh cũ
-                    foreach (var old in existing.Images) 
-                        await productImageRepo.DeleteAsync(old.Id);
-                }
+                // Update product trực tiếp trong transaction (không dùng productRepo.UpdateAsync vì nó tự gọi SaveChangesAsync)
+                dbContext.Products.Update(existing);
 
-                // Thêm các ảnh mới
-                foreach (var url in product.ImageUrls)
+                // Cập nhật ảnh nếu có
+                if (product.ImageUrls != null && product.ImageUrls.Any())
                 {
-                    var img = new ProductImage
+                    // Xóa các ảnh cũ (soft delete)
+                    if (existing.Images != null)
+                    {
+                        foreach (var old in existing.Images.Where(i => !i.IsDeleted))
+                        {
+                            old.IsDeleted = true;
+                            old.UpdatedAt = DateTime.UtcNow;
+                        }
+                        dbContext.ProductImages.UpdateRange(existing.Images.Where(i => !i.IsDeleted));
+                    }
+
+                    // Thêm các ảnh mới
+                    var newImages = product.ImageUrls.Select(url => new ProductImage
                     {
                         Id = Guid.NewGuid(),
                         ProductId = existing.Id,
                         Url = url,
                         CreatedAt = DateTime.UtcNow,
                         IsDeleted = false
-                    };
-                    await productImageRepo.AddAsync(img);
-                }
-            }
+                    }).ToList();
 
-            return result > 0
-                ? new ServiceResponse(true, "Product updated successfully.")
-                : new ServiceResponse(false, "Failed to update product.");
+                    await dbContext.ProductImages.AddRangeAsync(newImages);
+                }
+
+                // Save tất cả thay đổi trong một transaction
+                int result = await dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return result > 0
+                    ? ServiceResponse.Success("Product updated successfully.")
+                    : ServiceResponse.Fail("Failed to update product.", HttpStatusCode.InternalServerError);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return ServiceResponse.Fail($"Error updating product: {ex.Message}", HttpStatusCode.InternalServerError);
+            }
         }
 
 
-        public async Task<ServiceResponse> DeleteAsync(Guid id)
+        public async Task<ServiceResponse> DeleteAsync(Guid id, string userId)
         {
+            var existing = await productRepo.GetByIdAsync(id);
+            if (existing == null || existing.IsDeleted)
+                return ServiceResponse.Fail("Product not found.", HttpStatusCode.NotFound);
+
+            // ✅ Fix: Validate Shop ownership
+            var shop = await shopRepository.GetByIdAsync(existing.ShopId);
+            if (shop == null)
+                return ServiceResponse.Fail("Shop not found.", HttpStatusCode.NotFound);
+
+            var isAdmin = httpContextAccessor.HttpContext?.User.IsInRole("Admin") ?? false;
+            if (!isAdmin && shop.SellerId != userId)
+            {
+                return ServiceResponse.Fail("Bạn không có quyền xóa sản phẩm này.", HttpStatusCode.Forbidden);
+            }
+
             int result = await productRepo.SoftDeleteAsync(id);
             return result > 0
-                ? new ServiceResponse(true, "Product deleted (soft delete).")
-                : new ServiceResponse(false, "Product not found or failed to delete.");
+                ? ServiceResponse.Success("Product deleted (soft delete).")
+                : ServiceResponse.Fail("Failed to delete product.", HttpStatusCode.InternalServerError);
         }
 
         // ✅ Helper method để chuyển relative URL thành full URL
@@ -340,8 +402,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
         public async Task<IEnumerable<GetProduct>> GetAllAsync()
         {
             var data = await productRepo.GetAllAsync();
-            var active = data.Where(p => !p.IsDeleted);
-            var products = mapper.Map<IEnumerable<GetProduct>>(active);
+            // ✅ Fix: Xóa duplicate filter - Repository đã filter IsDeleted = false rồi
+            var products = mapper.Map<IEnumerable<GetProduct>>(data);
             
             // ✅ Convert relative URLs thành full URLs cho tất cả ảnh
             foreach (var product in products)
@@ -425,6 +487,196 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
             
             return productDetail;
+        }
+
+        // ✅ New: Search and filter with pagination
+        public async Task<PagedResult<GetProduct>> SearchAndFilterAsync(ProductFilterDto filter)
+        {
+            // Validate filter
+            filter.Validate();
+
+            // ✅ Fix: Chỉ hiển thị Approved products trong public search (trừ khi admin override)
+            var isAdmin = httpContextAccessor.HttpContext?.User.IsInRole("Admin") ?? false;
+            if (!isAdmin && !filter.Status.HasValue)
+            {
+                filter.Status = ProductStatus.Approved; // Force Approved status for public users
+            }
+
+            // Call repository
+            var (products, totalCount) = await productRepo.SearchAndFilterAsync(
+                filter.Keyword,
+                filter.ShopId,
+                filter.CategoryId,
+                filter.Status,
+                filter.MinPrice,
+                filter.MaxPrice,
+                filter.SortBy,
+                filter.SortOrder,
+                filter.Page,
+                filter.PageSize);
+
+            // Map to DTOs
+            var productDtos = mapper.Map<IEnumerable<GetProduct>>(products);
+
+            // ✅ Convert relative URLs thành full URLs cho tất cả ảnh
+            foreach (var product in productDtos)
+            {
+                if (product.ProductImages != null && product.ProductImages.Any())
+                {
+                    product.ProductImages = product.ProductImages.Select(img => new ProductImageDto
+                    {
+                        Id = img.Id,
+                        Url = GetFullImageUrl(img.Url)
+                    }).ToList();
+                }
+            }
+
+            return new PagedResult<GetProduct>
+            {
+                Data = productDtos.ToList(),
+                Page = filter.Page,
+                PageSize = filter.PageSize,
+                TotalCount = totalCount
+            };
+        }
+
+        // ✅ New: Stock management
+        public async Task<ServiceResponse> ReduceStockAsync(Guid productId, int quantity)
+        {
+            if (quantity <= 0)
+                return ServiceResponse.Fail("Số lượng phải lớn hơn 0.", HttpStatusCode.BadRequest);
+
+            var product = await productRepo.GetByIdForUpdateAsync(productId);
+            if (product == null)
+                return ServiceResponse.Fail("Product not found.", HttpStatusCode.NotFound);
+
+            if (product.StockQuantity < quantity)
+                return ServiceResponse.Fail($"Không đủ tồn kho. Hiện có: {product.StockQuantity}, yêu cầu: {quantity}", HttpStatusCode.BadRequest);
+
+            int result = await productRepo.UpdateStockQuantityAsync(productId, -quantity);
+            return result > 0
+                ? ServiceResponse.Success($"Đã giảm {quantity} sản phẩm khỏi tồn kho.")
+                : ServiceResponse.Fail("Failed to reduce stock.", HttpStatusCode.InternalServerError);
+        }
+
+        public async Task<ServiceResponse> RestoreStockAsync(Guid productId, int quantity)
+        {
+            if (quantity <= 0)
+                return ServiceResponse.Fail("Số lượng phải lớn hơn 0.", HttpStatusCode.BadRequest);
+
+            var product = await productRepo.GetByIdForUpdateAsync(productId);
+            if (product == null)
+                return ServiceResponse.Fail("Product not found.", HttpStatusCode.NotFound);
+
+            int result = await productRepo.UpdateStockQuantityAsync(productId, quantity);
+            return result > 0
+                ? ServiceResponse.Success($"Đã hoàn trả {quantity} sản phẩm vào tồn kho.")
+                : ServiceResponse.Fail("Failed to restore stock.", HttpStatusCode.InternalServerError);
+        }
+
+        public async Task<ServiceResponse> UpdateStockQuantityAsync(Guid productId, int newQuantity, string userId)
+        {
+            if (newQuantity < 0)
+                return ServiceResponse.Fail("Số lượng tồn kho không thể âm.", HttpStatusCode.BadRequest);
+
+            var product = await productRepo.GetByIdForUpdateAsync(productId);
+            if (product == null)
+                return ServiceResponse.Fail("Product not found.", HttpStatusCode.NotFound);
+
+            // Validate shop ownership
+            var shop = await shopRepository.GetByIdAsync(product.ShopId);
+            if (shop == null)
+                return ServiceResponse.Fail("Shop not found.", HttpStatusCode.NotFound);
+
+            var isAdmin = httpContextAccessor.HttpContext?.User.IsInRole("Admin") ?? false;
+            if (!isAdmin && shop.SellerId != userId)
+            {
+                return ServiceResponse.Fail("Bạn không có quyền cập nhật tồn kho sản phẩm này.", HttpStatusCode.Forbidden);
+            }
+
+            int quantityChange = newQuantity - product.StockQuantity;
+            int result = await productRepo.UpdateStockQuantityAsync(productId, quantityChange);
+            return result > 0
+                ? ServiceResponse.Success($"Đã cập nhật tồn kho thành {newQuantity}.")
+                : ServiceResponse.Fail("Failed to update stock.", HttpStatusCode.InternalServerError);
+        }
+
+        // ✅ New: Rating management
+        public async Task<ServiceResponse> RecalculateRatingAsync(Guid productId)
+        {
+            var product = await productRepo.GetByIdForUpdateAsync(productId);
+            if (product == null)
+                return ServiceResponse.Fail("Product not found.", HttpStatusCode.NotFound);
+
+            // Get all approved reviews for this product
+            var approvedReviews = await dbContext.Reviews
+                .Where(r => r.ProductId == productId && r.Status == Domain.Enums.ReviewStatus.Approved && !r.IsDeleted)
+                .ToListAsync();
+
+            if (approvedReviews.Count == 0)
+            {
+                product.AverageRating = 0.0f;
+                product.ReviewCount = 0;
+            }
+            else
+            {
+                float totalRating = approvedReviews.Sum(r => r.Rating);
+                product.AverageRating = totalRating / approvedReviews.Count;
+                product.ReviewCount = approvedReviews.Count;
+            }
+
+            product.UpdatedAt = DateTime.UtcNow;
+            dbContext.Products.Update(product);
+            int result = await dbContext.SaveChangesAsync();
+
+            return result > 0
+                ? ServiceResponse.Success($"Đã tính lại rating: {product.AverageRating:F2} ({product.ReviewCount} reviews).")
+                : ServiceResponse.Fail("Failed to recalculate rating.", HttpStatusCode.InternalServerError);
+        }
+
+        // ✅ New: Admin features
+        public async Task<PagedResult<GetProduct>> GetProductsByStatusAsync(ProductStatus status, int page, int pageSize)
+        {
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var filter = new ProductFilterDto
+            {
+                Status = status,
+                Page = page,
+                PageSize = pageSize,
+                SortBy = "createdAt",
+                SortOrder = "desc"
+            };
+
+            return await SearchAndFilterAsync(filter);
+        }
+
+        public async Task<object> GetProductStatisticsAsync()
+        {
+            var totalProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted);
+            var pendingProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.Status == ProductStatus.Pending);
+            var approvedProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.Status == ProductStatus.Approved);
+            var rejectedProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.Status == ProductStatus.Rejected);
+            var outOfStockProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.StockQuantity == 0);
+            var lowStockProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.StockQuantity > 0 && p.StockQuantity <= 10);
+
+            var totalRevenue = await dbContext.OrderItems
+                .Include(oi => oi.Order)
+                .Where(oi => oi.Order != null && oi.Order.Status == Domain.Enums.OrderStatus.Completed && !oi.Order.IsDeleted)
+                .SumAsync(oi => (decimal?)oi.Quantity * oi.PriceAtPurchase) ?? 0;
+
+            return new
+            {
+                TotalProducts = totalProducts,
+                PendingProducts = pendingProducts,
+                ApprovedProducts = approvedProducts,
+                RejectedProducts = rejectedProducts,
+                OutOfStockProducts = outOfStockProducts,
+                LowStockProducts = lowStockProducts,
+                TotalRevenue = totalRevenue
+            };
         }
     }
 }

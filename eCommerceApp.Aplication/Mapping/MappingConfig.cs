@@ -77,6 +77,8 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<Shop, GetShop>()
                 .ForMember(dest => dest.SellerName,
                     opt => opt.MapFrom(src => src.Seller != null ? src.Seller.FullName : null))
+                .ForMember(dest => dest.AverageRating, opt => opt.MapFrom(src => src.AverageRating))
+                .ForMember(dest => dest.ReviewCount, opt => opt.MapFrom(src => src.ReviewCount))
                 .ReverseMap();
 
             // Ánh xạ Shop -> ShopForProductDetail (Rút gọn)
