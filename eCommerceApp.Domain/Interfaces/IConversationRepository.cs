@@ -21,4 +21,5 @@ namespace eCommerceApp.Domain.Repositories
         // ✅ New: Get total count
         Task<int> GetUserConversationsCountAsync(string userId);
     }
+}
 

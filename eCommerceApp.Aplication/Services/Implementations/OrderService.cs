@@ -7,10 +7,9 @@ using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Repositories;
 using eCommerceApp.Domain.Interfaces;
 using System.Net;
-using Microsoft.EntityFrameworkCore;
-using eCommerceApp.Infrastructure.Data;
 using System.Linq;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -22,7 +21,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IShopRepository _shopRepo;
         private readonly IMapper _mapper;
         private readonly IProductService _productService;
-        private readonly AppDbContext _dbContext;
+        private readonly DbContext _dbContext; // ✅ New: For transaction support
         private readonly IHttpContextAccessor _httpContextAccessor; // ✅ New: Optimize admin check
 
         public OrderService(
@@ -32,7 +31,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             IShopRepository shopRepo,
             IMapper mapper,
             IProductService productService,
-            AppDbContext dbContext,
+            DbContext dbContext, // ✅ New: Inject DbContext
             IHttpContextAccessor httpContextAccessor) // ✅ New: Inject IHttpContextAccessor
         {
             _orderRepo = orderRepo;
@@ -199,8 +198,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 await transaction.CommitAsync();
 
                 // 10. Load navigation properties để map đúng
-                var savedOrder = await _orderRepo.GetByIdAsync(newOrder.Id);
-                if (savedOrder == null)
+                var orderWithDetails = await _orderRepo.GetByIdAsync(newOrder.Id);
+                if (orderWithDetails == null)
                 {
                     return ServiceResponse<List<OrderResponseDTO>>.Fail(
                         "Lỗi khi tạo đơn hàng.",
@@ -208,7 +207,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 }
 
                 // Map order với navigation properties đã được load
-                var orderDto = _mapper.Map<OrderResponseDTO>(savedOrder);
+                var orderDto = _mapper.Map<OrderResponseDTO>(orderWithDetails);
 
                 return ServiceResponse<List<OrderResponseDTO>>.Success(
                     new List<OrderResponseDTO> { orderDto },
@@ -216,7 +215,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
             catch (Exception ex)
             {
-                await _dbContext.Database.CurrentTransaction?.RollbackAsync();
+                await transaction.RollbackAsync();
                 return ServiceResponse<List<OrderResponseDTO>>.Fail(
                     $"Lỗi khi tạo đơn hàng: {ex.Message}",
                     HttpStatusCode.InternalServerError);
@@ -478,7 +477,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                             }
                         }
                     }
-                    catch (Exception ex)
+                    catch
                     {
                         // Log error nhưng không fail status update
                         // Trong production nên có logging service

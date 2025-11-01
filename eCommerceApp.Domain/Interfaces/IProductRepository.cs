@@ -29,5 +29,26 @@ namespace eCommerceApp.Domain.Interfaces
 
         // ✅ New: Count products by category
         Task<int> CountByCategoryIdAsync(Guid categoryId);
+        
+        // ✅ New: Update product with images in transaction
+        Task<int> UpdateWithImagesAsync(Product product, IEnumerable<ProductImage>? newImages);
+        
+        // ✅ New: Recalculate product rating from reviews
+        Task<int> RecalculateRatingAsync(Guid productId);
+        
+        // ✅ New: Get product statistics
+        Task<ProductStatistics> GetProductStatisticsAsync();
+    }
+    
+    // ✅ New: DTO for product statistics
+    public class ProductStatistics
+    {
+        public int TotalProducts { get; set; }
+        public int PendingProducts { get; set; }
+        public int ApprovedProducts { get; set; }
+        public int RejectedProducts { get; set; }
+        public int OutOfStockProducts { get; set; }
+        public int LowStockProducts { get; set; }
+        public decimal TotalRevenue { get; set; }
     }
 }

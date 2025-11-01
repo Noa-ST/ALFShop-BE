@@ -8,7 +8,6 @@ using eCommerceApp.Domain.Interfaces;
 using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using eCommerceApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 
@@ -17,12 +16,10 @@ namespace eCommerceApp.Aplication.Services.Implementations
     public class ProductService(
         IProductRepository productRepo,
         IMapper mapper
-        , IProductImageRepository productImageRepo
         , IShopRepository shopRepository
         , IGlobalCategoryRepository globalCategoryRepository
         , IWebHostEnvironment webHostEnvironment
         , IHttpContextAccessor httpContextAccessor
-        , AppDbContext dbContext
     ) : IProductService
     {
         public async Task<ServiceResponse> RejectProductAsync(Guid productId, string? rejectionReason)
@@ -205,7 +202,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                                     // Base64 không hợp lệ, skip ảnh này
                                     continue;
                                 }
-                                catch (Exception ex)
+                                catch (Exception)
                                 {
                                     // Log lỗi nhưng tiếp tục với ảnh khác
                                     continue;
@@ -229,7 +226,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                                 IsDeleted = false
                             });
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
                             // Log nhưng tiếp tục xử lý ảnh tiếp theo để không block các ảnh khác
                             continue;
@@ -294,29 +291,14 @@ namespace eCommerceApp.Aplication.Services.Implementations
             mapper.Map(product, existing);
             existing.UpdatedAt = DateTime.UtcNow;
 
-            // ✅ Fix: Sử dụng transaction để đảm bảo atomicity khi update images
-            using var transaction = await dbContext.Database.BeginTransactionAsync();
+            // ✅ Fix: Sử dụng repository method để đảm bảo atomicity khi update images
             try
             {
-                // Update product trực tiếp trong transaction (không dùng productRepo.UpdateAsync vì nó tự gọi SaveChangesAsync)
-                dbContext.Products.Update(existing);
-
-                // Cập nhật ảnh nếu có
+                // Prepare new images if provided
+                IEnumerable<ProductImage>? newImages = null;
                 if (product.ImageUrls != null && product.ImageUrls.Any())
                 {
-                    // Xóa các ảnh cũ (soft delete)
-                    if (existing.Images != null)
-                    {
-                        foreach (var old in existing.Images.Where(i => !i.IsDeleted))
-                        {
-                            old.IsDeleted = true;
-                            old.UpdatedAt = DateTime.UtcNow;
-                        }
-                        dbContext.ProductImages.UpdateRange(existing.Images.Where(i => !i.IsDeleted));
-                    }
-
-                    // Thêm các ảnh mới
-                    var newImages = product.ImageUrls.Select(url => new ProductImage
+                    newImages = product.ImageUrls.Select(url => new ProductImage
                     {
                         Id = Guid.NewGuid(),
                         ProductId = existing.Id,
@@ -324,13 +306,10 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         CreatedAt = DateTime.UtcNow,
                         IsDeleted = false
                     }).ToList();
-
-                    await dbContext.ProductImages.AddRangeAsync(newImages);
                 }
 
-                // Save tất cả thay đổi trong một transaction
-                int result = await dbContext.SaveChangesAsync();
-                await transaction.CommitAsync();
+                // Update product with images using repository transaction method
+                int result = await productRepo.UpdateWithImagesAsync(existing, newImages);
 
                 return result > 0
                     ? ServiceResponse.Success("Product updated successfully.")
@@ -338,7 +317,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
                 return ServiceResponse.Fail($"Error updating product: {ex.Message}", HttpStatusCode.InternalServerError);
             }
         }
@@ -608,30 +586,20 @@ namespace eCommerceApp.Aplication.Services.Implementations
             if (product == null)
                 return ServiceResponse.Fail("Product not found.", HttpStatusCode.NotFound);
 
-            // Get all approved reviews for this product
-            var approvedReviews = await dbContext.Reviews
-                .Where(r => r.ProductId == productId && r.Status == Domain.Enums.ReviewStatus.Approved && !r.IsDeleted)
-                .ToListAsync();
+            // ✅ Use repository method to recalculate rating
+            int result = await productRepo.RecalculateRatingAsync(productId);
 
-            if (approvedReviews.Count == 0)
+            if (result > 0)
             {
-                product.AverageRating = 0.0f;
-                product.ReviewCount = 0;
-            }
-            else
-            {
-                float totalRating = approvedReviews.Sum(r => r.Rating);
-                product.AverageRating = totalRating / approvedReviews.Count;
-                product.ReviewCount = approvedReviews.Count;
+                // Reload product to get updated rating
+                var updatedProduct = await productRepo.GetByIdAsync(productId);
+                if (updatedProduct != null)
+                {
+                    return ServiceResponse.Success($"Đã tính lại rating: {updatedProduct.AverageRating:F2} ({updatedProduct.ReviewCount} reviews).");
+                }
             }
 
-            product.UpdatedAt = DateTime.UtcNow;
-            dbContext.Products.Update(product);
-            int result = await dbContext.SaveChangesAsync();
-
-            return result > 0
-                ? ServiceResponse.Success($"Đã tính lại rating: {product.AverageRating:F2} ({product.ReviewCount} reviews).")
-                : ServiceResponse.Fail("Failed to recalculate rating.", HttpStatusCode.InternalServerError);
+            return ServiceResponse.Fail("Failed to recalculate rating.", HttpStatusCode.InternalServerError);
         }
 
         // ✅ New: Admin features
@@ -655,27 +623,18 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
         public async Task<object> GetProductStatisticsAsync()
         {
-            var totalProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted);
-            var pendingProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.Status == ProductStatus.Pending);
-            var approvedProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.Status == ProductStatus.Approved);
-            var rejectedProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.Status == ProductStatus.Rejected);
-            var outOfStockProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.StockQuantity == 0);
-            var lowStockProducts = await dbContext.Products.CountAsync(p => !p.IsDeleted && p.StockQuantity > 0 && p.StockQuantity <= 10);
-
-            var totalRevenue = await dbContext.OrderItems
-                .Include(oi => oi.Order)
-                .Where(oi => oi.Order != null && oi.Order.Status == Domain.Enums.OrderStatus.Completed && !oi.Order.IsDeleted)
-                .SumAsync(oi => (decimal?)oi.Quantity * oi.PriceAtPurchase) ?? 0;
+            // ✅ Use repository method to get statistics
+            var statistics = await productRepo.GetProductStatisticsAsync();
 
             return new
             {
-                TotalProducts = totalProducts,
-                PendingProducts = pendingProducts,
-                ApprovedProducts = approvedProducts,
-                RejectedProducts = rejectedProducts,
-                OutOfStockProducts = outOfStockProducts,
-                LowStockProducts = lowStockProducts,
-                TotalRevenue = totalRevenue
+                TotalProducts = statistics.TotalProducts,
+                PendingProducts = statistics.PendingProducts,
+                ApprovedProducts = statistics.ApprovedProducts,
+                RejectedProducts = statistics.RejectedProducts,
+                OutOfStockProducts = statistics.OutOfStockProducts,
+                LowStockProducts = statistics.LowStockProducts,
+                TotalRevenue = statistics.TotalRevenue
             };
         }
     }

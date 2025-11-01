@@ -19,7 +19,7 @@ namespace eCommerceApp.Infrastructure.Repositories
         public async Task AddAsync(Payment payment)
         {
             await _context.Payments.AddAsync(payment);
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
         }
 
         public async Task<bool> UpdateStatusAsync(Guid paymentId, string newStatus)
@@ -39,7 +39,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             }
 
             payment.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
             return true;
         }
 
@@ -47,7 +47,8 @@ namespace eCommerceApp.Infrastructure.Repositories
         {
             payment.UpdatedAt = DateTime.UtcNow;
             _context.Payments.Update(payment);
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
+            await Task.CompletedTask;
         }
 
         public async Task<Payment> ProcessPaymentAsync(Guid orderId, string method)
@@ -67,7 +68,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             };
 
             await _context.Payments.AddAsync(payment);
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
 
             return payment;
         }
@@ -93,7 +94,7 @@ namespace eCommerceApp.Infrastructure.Repositories
         public async Task AddHistoryAsync(PaymentHistory history)
         {
             await _context.PaymentHistories.AddAsync(history);
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
         }
 
         public async Task<IEnumerable<PaymentHistory>> GetHistoryByPaymentIdAsync(Guid paymentId)
@@ -198,6 +199,55 @@ namespace eCommerceApp.Infrastructure.Repositories
                     p.Amount,
                     p.CreatedAt))
                 .ToListAsync();
+        }
+        
+        // ✅ New: Add payment with transaction support
+        public async Task<Payment> AddWithTransactionAsync(Payment payment, Func<Task>? beforeSave = null)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                await _context.Payments.AddAsync(payment);
+                
+                if (beforeSave != null)
+                {
+                    await beforeSave();
+                }
+                
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return payment;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+        
+        // ✅ New: Update payment with transaction support
+        public async Task<int> UpdatePaymentWithTransactionAsync(Payment payment, Func<Task>? beforeSave = null)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                payment.UpdatedAt = DateTime.UtcNow;
+                _context.Payments.Update(payment);
+                
+                if (beforeSave != null)
+                {
+                    await beforeSave();
+                }
+                
+                int result = await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return result;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
     }
 }

@@ -18,8 +18,8 @@ namespace eCommerceApp.Infrastructure.Repositories
 
         public async Task<Order> CreateOrderAsync(Order order)
         {
-            _context.Orders.Add(order);
-            await _context.SaveChangesAsync();
+            await _context.Orders.AddAsync(order);
+            // ✅ Không tự động save - để UnitOfWork quản lý
             return order;
         }
 
@@ -68,13 +68,15 @@ namespace eCommerceApp.Infrastructure.Repositories
 
             order.Status = parsedStatus;
             order.UpdatedAt = DateTime.UtcNow; // ✅ Fix: Update UpdatedAt
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
+            await Task.CompletedTask;
         }
 
         public async Task UpdateOrderAsync(Order order)
         {
             _context.Orders.Update(order);
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
+            await Task.CompletedTask;
         }
 
         // ✅ New: Pagination & Filtering
@@ -268,7 +270,33 @@ namespace eCommerceApp.Infrastructure.Repositories
 
             order.TrackingNumber = trackingNumber;
             order.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
+            await Task.CompletedTask;
+        }
+        
+        // ✅ New: Create order with transaction support
+        public async Task<Order> CreateOrderWithTransactionAsync(Order order, Func<Task>? beforeSave = null)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                await _context.Orders.AddAsync(order);
+                
+                // Execute beforeSave callback if provided (e.g., reduce stock)
+                if (beforeSave != null)
+                {
+                    await beforeSave();
+                }
+                
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return order;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
     }
 }

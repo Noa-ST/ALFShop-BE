@@ -24,5 +24,9 @@ namespace eCommerceApp.Domain.Repositories
         Task<decimal> GetTotalRevenueAsync(DateTime? startDate = null, DateTime? endDate = null);
         Task<Dictionary<PaymentStatus, int>> GetPaymentsByStatusAsync();
         Task<List<(Guid OrderId, decimal Amount, DateTime CreatedAt)>> GetExpiredPaymentLinksAsync();
+        
+        // ✅ New: Transaction support methods
+        Task<Payment> AddWithTransactionAsync(Payment payment, Func<Task>? beforeSave = null);
+        Task<int> UpdatePaymentWithTransactionAsync(Payment payment, Func<Task>? beforeSave = null);
     }
 }

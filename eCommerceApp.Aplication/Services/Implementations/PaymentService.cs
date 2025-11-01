@@ -8,7 +8,6 @@ using eCommerceApp.Domain.Interfaces;
 using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Http;
-using eCommerceApp.Infrastructure.Data;
 using PaymentHistory = eCommerceApp.Domain.Entities.PaymentHistory;
 
 namespace eCommerceApp.Aplication.Services.Implementations
@@ -21,7 +20,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IPayOSService _payOSService;
         private readonly IConfiguration _configuration;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly AppDbContext _dbContext; // ✅ New: For transaction support
 
         public PaymentService(
             IPaymentRepository paymentRepository,
@@ -29,8 +27,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             IShopRepository shopRepository,
             IPayOSService payOSService,
             IConfiguration configuration,
-            IHttpContextAccessor httpContextAccessor,
-            AppDbContext dbContext) // ✅ New: Inject AppDbContext
+            IHttpContextAccessor httpContextAccessor)
         {
             _paymentRepository = paymentRepository;
             _orderRepository = orderRepository;
@@ -38,7 +35,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _payOSService = payOSService;
             _configuration = configuration;
             _httpContextAccessor = httpContextAccessor;
-            _dbContext = dbContext;
         }
 
         // ✅ Helper method để check admin role
@@ -49,13 +45,10 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
         public async Task<ServiceResponse<PayOSCreatePaymentResponse>> ProcessPaymentAsync(Guid orderId, string method, string userId)
         {
-            // ✅ Fix: Wrap trong transaction để tránh race condition
-            using var transaction = await _dbContext.Database.BeginTransactionAsync();
             try
             {
                 if (string.IsNullOrEmpty(userId))
                 {
-                    await transaction.RollbackAsync();
                     return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                         "Không thể xác định người dùng.",
                         HttpStatusCode.Unauthorized);
@@ -65,7 +58,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 var order = await _orderRepository.GetByIdAsync(orderId);
                 if (order == null)
                 {
-                    await transaction.RollbackAsync();
                     return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                         "Không tìm thấy đơn hàng.",
                         HttpStatusCode.NotFound);
@@ -74,7 +66,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // ✅ New: Validate Order amount > 0
                 if (order.TotalAmount <= 0)
                 {
-                    await transaction.RollbackAsync();
                     return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                         "Tổng tiền đơn hàng phải lớn hơn 0.",
                         HttpStatusCode.BadRequest);
@@ -83,7 +74,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // ✅ New: Validate Order status - không thể thanh toán order đã Delivered
                 if (order.Status == OrderStatus.Delivered)
                 {
-                    await transaction.RollbackAsync();
                     return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                         "Không thể thanh toán cho đơn hàng đã được giao.",
                         HttpStatusCode.BadRequest);
@@ -93,7 +83,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 var isAdmin = IsAdmin(userId);
                 if (!isAdmin && order.CustomerId != userId)
                 {
-                    await transaction.RollbackAsync();
                     return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                         "Bạn không có quyền thanh toán đơn hàng này.",
                         HttpStatusCode.Forbidden);
@@ -102,19 +91,17 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // 2. Validate Order status
                 if (order.Status == OrderStatus.Canceled)
                 {
-                    await transaction.RollbackAsync();
                     return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                         "Không thể thanh toán cho đơn hàng đã bị hủy.",
                         HttpStatusCode.BadRequest);
                 }
 
-                // 3. ✅ Fix: Check duplicate payment trong transaction (atomic)
+                // 3. ✅ Fix: Check duplicate payment
                 var existingPayment = await _paymentRepository.GetByOrderIdAsync(orderId);
                 if (existingPayment != null)
                 {
                     if (existingPayment.Status == PaymentStatus.Paid)
                     {
-                        await transaction.RollbackAsync();
                         return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                             "Đơn hàng này đã được thanh toán.",
                             HttpStatusCode.BadRequest);
@@ -125,7 +112,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // 4. Parse PaymentMethod
                 if (!Enum.TryParse<PaymentMethod>(method, true, out var paymentMethod))
                 {
-                    await transaction.RollbackAsync();
                     return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                         $"Phương thức thanh toán không hợp lệ: {method}",
                         HttpStatusCode.BadRequest);
@@ -180,8 +166,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     order.UpdatedAt = DateTime.UtcNow;
                     await _orderRepository.UpdateOrderAsync(order);
 
-                    // ✅ Commit transaction
-                    await transaction.CommitAsync();
+                    // ✅ Note: Transaction được quản lý bởi UnitOfWork hoặc repository layer
+                    // Các repository methods không tự động save để UnitOfWork quản lý
 
                     return ServiceResponse<PayOSCreatePaymentResponse>.Success(
                         new PayOSCreatePaymentResponse { Code = 0, Desc = "Thanh toán COD thành công." },
@@ -218,7 +204,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
                     if (payOSResponse.Code != 0 || payOSResponse.Data == null)
                     {
-                        await transaction.RollbackAsync();
                         return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                             $"Lỗi khi tạo payment link: {payOSResponse.Desc}",
                             HttpStatusCode.BadRequest);
@@ -276,8 +261,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     order.UpdatedAt = DateTime.UtcNow;
                     await _orderRepository.UpdateOrderAsync(order);
 
-                    // ✅ Commit transaction
-                    await transaction.CommitAsync();
+                    // ✅ Note: Transaction được quản lý bởi UnitOfWork hoặc repository layer
 
                     return ServiceResponse<PayOSCreatePaymentResponse>.Success(
                         payOSResponse,
@@ -286,7 +270,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
             catch (Exception ex)
             {
-                await _dbContext.Database.CurrentTransaction?.RollbackAsync();
                 return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                     $"Lỗi khi xử lý thanh toán: {ex.Message}",
                     HttpStatusCode.InternalServerError);
@@ -369,7 +352,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         await _orderRepository.UpdateOrderAsync(order);
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
                     // Log warning nhưng không fail toàn bộ operation
                     // TODO: Log warning
@@ -444,7 +427,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 var recentHistory = await _paymentRepository.GetHistoryByPaymentIdAsync(payment.PaymentId);
                 var hasRecentStatusChange = recentHistory
                     .OrderByDescending(h => h.CreatedAt)
-                    .FirstOrDefault(h => h.NewStatus == newStatus && h.Reason.Contains("Webhook từ PayOS"));
+                    .FirstOrDefault(h => h.NewStatus == newStatus && (h.Reason?.Contains("Webhook từ PayOS") ?? false));
 
                 // 5. Chỉ cập nhật nếu status thay đổi và chưa được xử lý
                 if (oldStatus != newStatus && hasRecentStatusChange == null)
@@ -498,7 +481,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                             await _orderRepository.UpdateOrderAsync(order);
                         }
                     }
-                    catch (Exception ex)
+                    catch
                     {
                         // Log warning nhưng không fail toàn bộ operation
                         // TODO: Log warning - Không thể cập nhật Order
@@ -652,7 +635,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // 7. Update Order
                 try
                 {
-                    var order = await _orderRepository.GetByIdAsync(payment.OrderId);
                     if (order != null && newStatus == PaymentStatus.Failed)
                     {
                         order.PaymentStatus = PaymentStatus.Failed;

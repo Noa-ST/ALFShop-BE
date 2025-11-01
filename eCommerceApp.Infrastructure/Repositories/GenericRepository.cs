@@ -14,17 +14,19 @@ namespace eCommerceApp.Infrastructure.Repositories
 
     {
         /// <summary>
-        /// Thêm một entity mới vào database.
+        /// Thêm một entity mới vào context (không tự động save).
+        /// Return 1 để indicate entity đã được add vào context.
         /// </summary>
         public async Task<int> AddAsync(TEntity entity)
         {
-            context.Set<TEntity>().Add(entity);
-            return await context.SaveChangesAsync();
+            await context.Set<TEntity>().AddAsync(entity);
+            // ✅ Không tự động save - để UnitOfWork quản lý
+            return 1;
         }
 
         /// <summary>
-        /// Xóa entity theo Id (Guid).
-        /// Trả về 0 nếu không tìm thấy entity.
+        /// Xóa entity theo Id (Guid) từ context (không tự động save).
+        /// Trả về 0 nếu không tìm thấy entity, 1 nếu đã mark để delete.
         /// </summary>
         public async Task<int> DeleteAsync(Guid id)
         {
@@ -33,7 +35,8 @@ namespace eCommerceApp.Infrastructure.Repositories
                 return 0;
 
             context.Set<TEntity>().Remove(entity);
-            return await context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
+            return 1;
         }
 
         /// <summary>
@@ -55,12 +58,15 @@ namespace eCommerceApp.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Cập nhật entity đã có.
+        /// Cập nhật entity đã có trong context (không tự động save).
+        /// Return 1 để indicate entity đã được update trong context.
         /// </summary>
         public async Task<int> UpdateAsync(TEntity entity)
         {
             context.Set<TEntity>().Update(entity);
-            return await context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
+            await Task.CompletedTask; // Để giữ async signature
+            return 1;
         }
     }
 }

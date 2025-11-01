@@ -5,12 +5,12 @@ using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces;
-using eCommerceApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Net;
+using eCommerceApp.Infrastructure.Data;
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -210,7 +210,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
 
             // Lấy tất cả products của shop
-            var productIds = await _dbContext.Products
+            var productIds = await _dbContext.Set<Product>()
                 .Where(p => p.ShopId == shopId && !p.IsDeleted)
                 .Select(p => p.Id)
                 .ToListAsync();
@@ -223,7 +223,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             else
             {
                 // Lấy tất cả approved reviews của các products trong shop
-                var approvedReviews = await _dbContext.Reviews
+                var approvedReviews = await _dbContext.Set<Review>()
                     .Where(r => productIds.Contains(r.ProductId) 
                         && r.Status == Domain.Enums.ReviewStatus.Approved 
                         && !r.IsDeleted)
@@ -243,7 +243,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
 
             shop.UpdatedAt = DateTime.UtcNow;
-            _dbContext.Shops.Update(shop);
+            _dbContext.Set<Shop>().Update(shop);
             int result = await _dbContext.SaveChangesAsync();
 
             return result > 0

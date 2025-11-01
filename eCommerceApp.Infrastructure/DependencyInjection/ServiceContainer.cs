@@ -95,6 +95,9 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
             services.AddScoped<IEmailService, EmailService>();
 
+            // ✅ Register UnitOfWork
+            services.AddScoped<IUnitOfWork, UnitOfWork>();
+
             return services;
         }
 

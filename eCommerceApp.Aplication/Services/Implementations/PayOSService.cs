@@ -59,7 +59,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
         }
 
-        public async Task<bool> VerifyWebhookSignatureAsync(PayOSWebhookRequest webhook, string checksumKey)
+        public Task<bool> VerifyWebhookSignatureAsync(PayOSWebhookRequest webhook, string checksumKey)
         {
             try
             {
@@ -74,11 +74,11 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 var hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(dataJson));
                 var computedSignature = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
 
-                return computedSignature.Equals(webhook.Signature, StringComparison.OrdinalIgnoreCase);
+                return Task.FromResult(computedSignature.Equals(webhook.Signature, StringComparison.OrdinalIgnoreCase));
             }
             catch
             {
-                return false;
+                return Task.FromResult(false);
             }
         }
 

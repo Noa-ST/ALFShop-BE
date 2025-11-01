@@ -248,5 +248,103 @@ namespace eCommerceApp.Infrastructure.Repositories
             return await _context.Products
                 .CountAsync(p => p.GlobalCategoryId == categoryId && !p.IsDeleted);
         }
+        
+        // ✅ New: Update product with images in transaction
+        public async Task<int> UpdateWithImagesAsync(Product product, IEnumerable<ProductImage>? newImages)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                _context.Products.Update(product);
+                
+                // Update images if provided
+                if (newImages != null && newImages.Any())
+                {
+                    // Soft delete old images
+                    var existingImages = await _context.ProductImages
+                        .Where(pi => pi.ProductId == product.Id && !pi.IsDeleted)
+                        .ToListAsync();
+                    
+                    foreach (var oldImage in existingImages)
+                    {
+                        oldImage.IsDeleted = true;
+                        oldImage.UpdatedAt = DateTime.UtcNow;
+                    }
+                    
+                    if (existingImages.Any())
+                    {
+                        _context.ProductImages.UpdateRange(existingImages);
+                    }
+                    
+                    // Add new images
+                    await _context.ProductImages.AddRangeAsync(newImages);
+                }
+                
+                int result = await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return result;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+        
+        // ✅ New: Recalculate product rating from reviews
+        public async Task<int> RecalculateRatingAsync(Guid productId)
+        {
+            var product = await _context.Products.FindAsync(productId);
+            if (product == null || product.IsDeleted)
+                return 0;
+            
+            // Get all approved reviews for this product
+            var approvedReviews = await _context.Reviews
+                .Where(r => r.ProductId == productId && r.Status == Domain.Enums.ReviewStatus.Approved && !r.IsDeleted)
+                .ToListAsync();
+            
+            if (approvedReviews.Count == 0)
+            {
+                product.AverageRating = 0.0f;
+                product.ReviewCount = 0;
+            }
+            else
+            {
+                float totalRating = approvedReviews.Sum(r => r.Rating);
+                product.AverageRating = totalRating / approvedReviews.Count;
+                product.ReviewCount = approvedReviews.Count;
+            }
+            
+            product.UpdatedAt = DateTime.UtcNow;
+            _context.Products.Update(product);
+            return await _context.SaveChangesAsync();
+        }
+        
+        // ✅ New: Get product statistics
+        public async Task<ProductStatistics> GetProductStatisticsAsync()
+        {
+            var totalProducts = await _context.Products.CountAsync(p => !p.IsDeleted);
+            var pendingProducts = await _context.Products.CountAsync(p => !p.IsDeleted && p.Status == Domain.Enums.ProductStatus.Pending);
+            var approvedProducts = await _context.Products.CountAsync(p => !p.IsDeleted && p.Status == Domain.Enums.ProductStatus.Approved);
+            var rejectedProducts = await _context.Products.CountAsync(p => !p.IsDeleted && p.Status == Domain.Enums.ProductStatus.Rejected);
+            var outOfStockProducts = await _context.Products.CountAsync(p => !p.IsDeleted && p.StockQuantity == 0);
+            var lowStockProducts = await _context.Products.CountAsync(p => !p.IsDeleted && p.StockQuantity > 0 && p.StockQuantity <= 10);
+            
+            var totalRevenue = await _context.OrderItems
+                .Include(oi => oi.Order)
+                .Where(oi => oi.Order != null && oi.Order.Status == Domain.Enums.OrderStatus.Delivered && !oi.Order.IsDeleted)
+                .SumAsync(oi => (decimal?)oi.Quantity * oi.PriceAtPurchase) ?? 0;
+            
+            return new ProductStatistics
+            {
+                TotalProducts = totalProducts,
+                PendingProducts = pendingProducts,
+                ApprovedProducts = approvedProducts,
+                RejectedProducts = rejectedProducts,
+                OutOfStockProducts = outOfStockProducts,
+                LowStockProducts = lowStockProducts,
+                TotalRevenue = totalRevenue
+            };
+        }
     }
 }

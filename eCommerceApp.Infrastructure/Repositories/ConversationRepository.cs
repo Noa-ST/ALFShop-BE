@@ -66,14 +66,15 @@ namespace eCommerceApp.Infrastructure.Repositories
         public async Task<Conversation> AddAsync(Conversation conversation)
         {
             await _context.Conversations.AddAsync(conversation);
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
             return conversation;
         }
 
         public async Task UpdateAsync(Conversation conversation)
         {
             _context.Conversations.Update(conversation);
-            await _context.SaveChangesAsync();
+            // ✅ Không tự động save - để UnitOfWork quản lý
+            await Task.CompletedTask;
         }
 
         public Task SaveChangesAsync() => _context.SaveChangesAsync();

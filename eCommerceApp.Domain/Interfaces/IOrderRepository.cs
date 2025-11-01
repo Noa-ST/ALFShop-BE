@@ -39,5 +39,8 @@ namespace eCommerceApp.Domain.Repositories
         
         // ✅ New: Update Tracking Number
         Task UpdateTrackingNumberAsync(Guid orderId, string trackingNumber);
+        
+        // ✅ New: Create order with transaction support (for stock reduction)
+        Task<Order> CreateOrderWithTransactionAsync(Order order, Func<Task>? beforeSave = null);
     }
 }
