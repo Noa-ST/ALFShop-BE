@@ -7,10 +7,8 @@ using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Net;
-using eCommerceApp.Infrastructure.Data;
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -20,20 +18,17 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IMapper _mapper;
         private readonly UserManager<User> _userManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly AppDbContext _dbContext;
 
         public ShopService(
             IShopRepository shopRepository, 
             IMapper mapper,
             UserManager<User> userManager,
-            IHttpContextAccessor httpContextAccessor,
-            AppDbContext dbContext)
+            IHttpContextAccessor httpContextAccessor)
         {
             _shopRepository = shopRepository;
             _mapper = mapper;
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
-            _dbContext = dbContext;
         }
 
         public async Task<ServiceResponse> CreateAsync(CreateShop shop)
@@ -209,46 +204,20 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 return ServiceResponse.Fail("Shop not found.", HttpStatusCode.NotFound);
             }
 
-            // Lấy tất cả products của shop
-            var productIds = await _dbContext.Set<Product>()
-                .Where(p => p.ShopId == shopId && !p.IsDeleted)
-                .Select(p => p.Id)
-                .ToListAsync();
+            // ✅ Sử dụng repository method thay vì AppDbContext trực tiếp
+            int result = await _shopRepository.RecalculateRatingAsync(shopId);
 
-            if (productIds.Count == 0)
+            if (result > 0)
             {
-                shop.AverageRating = 0.0f;
-                shop.ReviewCount = 0;
-            }
-            else
-            {
-                // Lấy tất cả approved reviews của các products trong shop
-                var approvedReviews = await _dbContext.Set<Review>()
-                    .Where(r => productIds.Contains(r.ProductId) 
-                        && r.Status == Domain.Enums.ReviewStatus.Approved 
-                        && !r.IsDeleted)
-                    .ToListAsync();
-
-                if (approvedReviews.Count == 0)
+                // Reload shop để lấy rating đã cập nhật
+                var updatedShop = await _shopRepository.GetByIdAsync(shopId);
+                if (updatedShop != null)
                 {
-                    shop.AverageRating = 0.0f;
-                    shop.ReviewCount = 0;
-                }
-                else
-                {
-                    float totalRating = approvedReviews.Sum(r => r.Rating);
-                    shop.AverageRating = totalRating / approvedReviews.Count;
-                    shop.ReviewCount = approvedReviews.Count;
+                    return ServiceResponse.Success($"Đã tính lại rating: {updatedShop.AverageRating:F2} ({updatedShop.ReviewCount} reviews).");
                 }
             }
 
-            shop.UpdatedAt = DateTime.UtcNow;
-            _dbContext.Set<Shop>().Update(shop);
-            int result = await _dbContext.SaveChangesAsync();
-
-            return result > 0
-                ? ServiceResponse.Success($"Đã tính lại rating: {shop.AverageRating:F2} ({shop.ReviewCount} reviews).")
-                : ServiceResponse.Fail("Failed to recalculate rating.", HttpStatusCode.InternalServerError);
+            return ServiceResponse.Fail("Failed to recalculate rating.", HttpStatusCode.InternalServerError);
         }
 
         // ✅ New: Statistics for Admin dashboard

@@ -139,5 +139,50 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .Select(g => new { ShopId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.ShopId, x => x.Count);
         }
+        
+        // ✅ New: Recalculate shop rating from reviews of all products
+        public async Task<int> RecalculateRatingAsync(Guid shopId)
+        {
+            var shop = await _context.Shops.FindAsync(shopId);
+            if (shop == null || shop.IsDeleted)
+                return 0;
+            
+            // Lấy tất cả products của shop
+            var productIds = await _context.Products
+                .Where(p => p.ShopId == shopId && !p.IsDeleted)
+                .Select(p => p.Id)
+                .ToListAsync();
+            
+            if (productIds.Count == 0)
+            {
+                shop.AverageRating = 0.0f;
+                shop.ReviewCount = 0;
+            }
+            else
+            {
+                // Lấy tất cả approved reviews của các products trong shop
+                var approvedReviews = await _context.Reviews
+                    .Where(r => productIds.Contains(r.ProductId) 
+                        && r.Status == Domain.Enums.ReviewStatus.Approved 
+                        && !r.IsDeleted)
+                    .ToListAsync();
+                
+                if (approvedReviews.Count == 0)
+                {
+                    shop.AverageRating = 0.0f;
+                    shop.ReviewCount = 0;
+                }
+                else
+                {
+                    float totalRating = approvedReviews.Sum(r => r.Rating);
+                    shop.AverageRating = totalRating / approvedReviews.Count;
+                    shop.ReviewCount = approvedReviews.Count;
+                }
+            }
+            
+            shop.UpdatedAt = DateTime.UtcNow;
+            _context.Shops.Update(shop);
+            return await _context.SaveChangesAsync();
+        }
     }
 }

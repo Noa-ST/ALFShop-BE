@@ -26,5 +26,8 @@ namespace eCommerceApp.Domain.Interfaces
         Task<int> GetTotalCountAsync();
         Task<Dictionary<string, int>> GetShopsByCityAsync();
         Task<Dictionary<Guid, int>> GetProductCountPerShopAsync();
+        
+        // ✅ New: Recalculate shop rating from reviews of all products
+        Task<int> RecalculateRatingAsync(Guid shopId);
     }
 }

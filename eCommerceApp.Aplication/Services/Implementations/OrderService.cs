@@ -9,7 +9,6 @@ using eCommerceApp.Domain.Interfaces;
 using System.Net;
 using System.Linq;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -21,7 +20,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IShopRepository _shopRepo;
         private readonly IMapper _mapper;
         private readonly IProductService _productService;
-        private readonly DbContext _dbContext; // ✅ New: For transaction support
+        private readonly IUnitOfWork _unitOfWork; // ✅ Fix: Use IUnitOfWork for transaction support
         private readonly IHttpContextAccessor _httpContextAccessor; // ✅ New: Optimize admin check
 
         public OrderService(
@@ -31,7 +30,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             IShopRepository shopRepo,
             IMapper mapper,
             IProductService productService,
-            DbContext dbContext, // ✅ New: Inject DbContext
+            IUnitOfWork unitOfWork, // ✅ Fix: Inject IUnitOfWork instead of DbContext
             IHttpContextAccessor httpContextAccessor) // ✅ New: Inject IHttpContextAccessor
         {
             _orderRepo = orderRepo;
@@ -40,7 +39,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _shopRepo = shopRepo;
             _mapper = mapper;
             _productService = productService;
-            _dbContext = dbContext;
+            _unitOfWork = unitOfWork;
             _httpContextAccessor = httpContextAccessor;
         }
 
@@ -57,8 +56,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
         public async Task<ServiceResponse<List<OrderResponseDTO>>> CreateOrderAsync(OrderCreateDTO dto)
         {
-            // ✅ Fix: Use transaction để đảm bảo consistency
-            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            // ✅ Fix: Use IUnitOfWork transaction để đảm bảo consistency
+            await _unitOfWork.BeginTransactionAsync();
             try
             {
                 // 1. Validate CustomerId
@@ -184,7 +183,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     var stockResult = await _productService.ReduceStockAsync(item.ProductId, item.Quantity);
                     if (!stockResult.Succeeded)
                     {
-                        await transaction.RollbackAsync();
+                        await _unitOfWork.RollbackTransactionAsync();
                         return ServiceResponse<List<OrderResponseDTO>>.Fail(
                             $"Không thể giảm số lượng tồn kho cho sản phẩm {item.ProductId}. {stockResult.Message}",
                             HttpStatusCode.BadRequest);
@@ -195,7 +194,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 await _orderRepo.CreateOrderAsync(newOrder);
 
                 // 9. Commit transaction
-                await transaction.CommitAsync();
+                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
 
                 // 10. Load navigation properties để map đúng
                 var orderWithDetails = await _orderRepo.GetByIdAsync(newOrder.Id);
@@ -215,7 +215,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                await _unitOfWork.RollbackTransactionAsync();
                 return ServiceResponse<List<OrderResponseDTO>>.Fail(
                     $"Lỗi khi tạo đơn hàng: {ex.Message}",
                     HttpStatusCode.InternalServerError);
