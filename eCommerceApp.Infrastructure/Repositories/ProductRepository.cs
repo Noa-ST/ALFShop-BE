@@ -76,6 +76,13 @@ namespace eCommerceApp.Infrastructure.Repositories
             return await _context.SaveChangesAsync();
         }
 
+        // ✅ New: Update product status and save changes (for approve/reject)
+        public async Task<int> UpdateStatusAsync(Product product)
+        {
+            _context.Products.Update(product);
+            return await _context.SaveChangesAsync();
+        }
+
         // ✅ AddWithImagesAsync - Sửa để gán ProductId cho images và tránh duplicate Id
         public async Task<int> AddWithImagesAsync(Product product, IEnumerable<ProductImage>? images)
         {
@@ -252,43 +259,49 @@ namespace eCommerceApp.Infrastructure.Repositories
         // ✅ New: Update product with images in transaction
         public async Task<int> UpdateWithImagesAsync(Product product, IEnumerable<ProductImage>? newImages)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            // ✅ Fix: Dùng ExecutionStrategy để hỗ trợ retry (giống như AddWithImagesAsync)
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
             {
-                _context.Products.Update(product);
-                
-                // Update images if provided
-                if (newImages != null && newImages.Any())
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    // Soft delete old images
-                    var existingImages = await _context.ProductImages
-                        .Where(pi => pi.ProductId == product.Id && !pi.IsDeleted)
-                        .ToListAsync();
+                    _context.Products.Update(product);
                     
-                    foreach (var oldImage in existingImages)
+                    // Update images if provided
+                    if (newImages != null && newImages.Any())
                     {
-                        oldImage.IsDeleted = true;
-                        oldImage.UpdatedAt = DateTime.UtcNow;
+                        // Soft delete old images
+                        var existingImages = await _context.ProductImages
+                            .Where(pi => pi.ProductId == product.Id && !pi.IsDeleted)
+                            .ToListAsync();
+                        
+                        foreach (var oldImage in existingImages)
+                        {
+                            oldImage.IsDeleted = true;
+                            oldImage.UpdatedAt = DateTime.UtcNow;
+                        }
+                        
+                        if (existingImages.Any())
+                        {
+                            _context.ProductImages.UpdateRange(existingImages);
+                        }
+                        
+                        // Add new images
+                        await _context.ProductImages.AddRangeAsync(newImages);
                     }
                     
-                    if (existingImages.Any())
-                    {
-                        _context.ProductImages.UpdateRange(existingImages);
-                    }
-                    
-                    // Add new images
-                    await _context.ProductImages.AddRangeAsync(newImages);
+                    int result = await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    return result;
                 }
-                
-                int result = await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-                return result;
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         
         // ✅ New: Recalculate product rating from reviews

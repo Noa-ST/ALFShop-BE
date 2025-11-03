@@ -13,6 +13,7 @@ namespace eCommerceApp.Domain.Interfaces.Authentication
         Task<string> UpdateRefreshTokenAndGetNew(string userId, string oldRefreshToken);
         Task<int> RevokeRefreshToken(string refreshToken);
         Task<int> RevokeAllUserRefreshTokens(string userId);
+        Task<int> CleanupExpiredTokens();
         string GenerateToken(List<Claim> claims);
     }
 }

@@ -3,6 +3,7 @@ using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Identity;
 using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Aplication.Services.Interfaces.Authentication;
+using eCommerceApp.Aplication.Services.Interfaces.Logging;
 using eCommerceApp.Aplication.Validations;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces.Authentication;
@@ -24,14 +25,21 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
         IValidationService validationService,
         IEmailService emailService,
         UserManager<User> userManager,
-        RoleManager<IdentityRole> roleManager
+        RoleManager<IdentityRole> roleManager,
+        IAppLogger<AuthenticationService> logger
     ) : IAuthenticationService
     {
         // ... (Hàm CreateUser giữ nguyên)
         public async Task<ServiceResponse> CreateUser(CreateUser user)
         {
+            logger.LogInformation($"Attempting to create user with email: {user.Email}");
+            
             var validation = await validationService.ValidateAsync(user, createUserValidator);
-            if (!validation.Succeeded) return validation;
+            if (!validation.Succeeded)
+            {
+                logger.LogWarning($"User creation validation failed for email: {user.Email}");
+                return validation;
+            }
 
             var mappedModel = mapper.Map<User>(user);
             mappedModel.UserName = user.Email;
@@ -39,6 +47,8 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
             var result = await userManager.CreateAsync(mappedModel, user.Password);
             if (!result.Succeeded)
             {
+                logger.LogError(new Exception($"User creation failed: {string.Join(";", result.Errors.Select(e => e.Description))}"), 
+                    $"Failed to create user with email: {user.Email}");
                 return new ServiceResponse
                 {
                     Message = string.Join(";", result.Errors.Select(e => e.Description))
@@ -66,12 +76,15 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                 mappedModel.FullName ?? mappedModel.Email!
             );
 
+            logger.LogInformation($"User created successfully with email: {user.Email}, role: {roleToAssign}");
             return new ServiceResponse { Succeeded = true, Message = "Account created! Please check your email to confirm your account." };
         }
 
         // Đăng nhập
         public async Task<LoginResponse> LoginUser(LoginUser user)
         {
+            logger.LogInformation($"Login attempt for email: {user.Email}");
+            
             var validation = await validationService.ValidateAsync(user, loginUserValidator);
             if (!validation.Succeeded)
                 // Dùng Named Arguments cho tất cả 7 tham số
@@ -96,8 +109,24 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                     UserId: "",
                     Fullname: "");
 
+            // Kiểm tra email đã được xác nhận chưa
+            if (!_user.EmailConfirmed)
+            {
+                logger.LogWarning($"Login attempt failed - email not confirmed for: {user.Email}");
+                return new LoginResponse(
+                    Success: false,
+                    Message: "Please confirm your email before logging in. Check your email for confirmation link.",
+                    Token: null!,
+                    RefreshToken: null!,
+                    Role: "",
+                    UserId: "",
+                    Fullname: "");
+            }
+
             var validPassword = await userManager.CheckPasswordAsync(_user, user.Password);
             if (!validPassword)
+            {
+                logger.LogWarning($"Login attempt failed - invalid password for: {user.Email}");
                 // Dùng Named Arguments cho tất cả 7 tham số
                 return new LoginResponse(
                     Success: false,
@@ -107,6 +136,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                     Role: "",
                     UserId: "",
                     Fullname: "");
+            }
 
             var roles = await userManager.GetRolesAsync(_user);
             var claims = new List<Claim>
@@ -128,9 +158,11 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
             var mainRole = roles.FirstOrDefault() ?? "Customer";
 
             // Sử dụng Named Arguments cho tất cả 7 tham số trong mọi trường hợp trả về
-            return saveTokenResult <= 0
-                // Trường hợp lỗi lưu token
-                ? new LoginResponse(
+            if (saveTokenResult <= 0)
+            {
+                logger.LogError(new Exception("Failed to save refresh token"), 
+                    $"Failed to save refresh token for user: {_user.Email}");
+                return new LoginResponse(
                     Success: false,
                     Message: "Internal error occurred while authenticating",
                     Token: jwtToken,
@@ -138,17 +170,19 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                     Role: mainRole,
                     UserId: _user.Id,
                     Fullname: _user.FullName ?? ""
-                )
-                // Trường hợp thành công
-                : new LoginResponse(
-                    Success: true,
-                    Message: "Login successful",
-                    Token: jwtToken,
-                    RefreshToken: refreshToken,
-                    Role: mainRole,
-                    UserId: _user.Id,
-                    Fullname: _user.FullName ?? ""
                 );
+            }
+
+            logger.LogInformation($"Login successful for user: {user.Email}, role: {mainRole}");
+            return new LoginResponse(
+                Success: true,
+                Message: "Login successful",
+                Token: jwtToken,
+                RefreshToken: refreshToken,
+                Role: mainRole,
+                UserId: _user.Id,
+                Fullname: _user.FullName ?? ""
+            );
         }
 
         // Làm mới token
@@ -209,11 +243,14 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
         // Logout
         public async Task<ServiceResponse> Logout(string userId, string refreshToken)
         {
+            logger.LogInformation($"Logout attempt for user ID: {userId}");
             var result = await tokenManagement.RevokeRefreshToken(refreshToken);
             if (result <= 0)
             {
+                logger.LogWarning($"Failed to revoke refresh token for user ID: {userId}");
                 return new ServiceResponse { Message = "Failed to logout" };
             }
+            logger.LogInformation($"Logout successful for user ID: {userId}");
             return new ServiceResponse { Succeeded = true, Message = "Logged out successfully" };
         }
 
@@ -287,18 +324,22 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
         // Reset password with token
         public async Task<ServiceResponse> ResetPassword(ResetPasswordRequest request)
         {
+            logger.LogInformation($"Password reset attempt for email: {request.Email}");
             var validation = await validationService.ValidateAsync(request, resetPasswordValidator);
             if (!validation.Succeeded) return validation;
 
             var user = await userManager.FindByEmailAsync(request.Email);
             if (user == null)
             {
+                logger.LogWarning($"Password reset failed - user not found: {request.Email}");
                 return new ServiceResponse { Message = "User not found" };
             }
 
             var result = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
             if (!result.Succeeded)
             {
+                logger.LogError(new Exception($"Password reset failed: {string.Join(";", result.Errors.Select(e => e.Description))}"), 
+                    $"Failed to reset password for: {request.Email}");
                 return new ServiceResponse
                 {
                     Message = string.Join(";", result.Errors.Select(e => e.Description))
@@ -307,7 +348,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
 
             // Revoke all refresh tokens for security
             await tokenManagement.RevokeAllUserRefreshTokens(user.Id);
-
+            logger.LogInformation($"Password reset successful for email: {request.Email}, all refresh tokens revoked");
             return new ServiceResponse { Succeeded = true, Message = "Password reset successfully" };
         }
 

@@ -16,15 +16,18 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IGlobalCategoryRepository _globalCategoryRepository;
         private readonly IProductRepository _productRepository;
         private readonly IMapper _mapper;
+        private readonly IUnitOfWork _unitOfWork;
 
         public GlobalCategoryService(
             IGlobalCategoryRepository globalCategoryRepository, 
             IProductRepository productRepository,
-            IMapper mapper)
+            IMapper mapper,
+            IUnitOfWork unitOfWork)
         {
             _globalCategoryRepository = globalCategoryRepository;
             _productRepository = productRepository;
             _mapper = mapper;
+            _unitOfWork = unitOfWork;
         }
 
         public async Task<ServiceResponse<GetGlobalCategory>> CreateGlobalCategoryAsync(CreateGlobalCategory dto)
@@ -61,6 +64,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
             category.IsDeleted = false;
             
             await _globalCategoryRepository.AddAsync(category);
+
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            if (saved <= 0)
+            {
+                return ServiceResponse<GetGlobalCategory>.Fail(
+                    "Không thể lưu danh mục vào database.", 
+                    HttpStatusCode.InternalServerError);
+            }
 
             var categoryDto = _mapper.Map<GetGlobalCategory>(category);
             return ServiceResponse<GetGlobalCategory>.Success(categoryDto, "Tạo danh mục toàn cầu thành công.");
@@ -130,6 +142,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
             category.UpdatedAt = DateTime.UtcNow;
             await _globalCategoryRepository.UpdateAsync(category);
 
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            if (saved <= 0)
+            {
+                return ServiceResponse<bool>.Fail(
+                    "Không thể cập nhật danh mục vào database.", 
+                    HttpStatusCode.InternalServerError);
+            }
+
             return ServiceResponse<bool>.Success(true, "Cập nhật danh mục thành công.");
         }
 
@@ -165,6 +186,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
             category.IsDeleted = true;
             category.UpdatedAt = DateTime.UtcNow;
             await _globalCategoryRepository.UpdateAsync(category);
+
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            if (saved <= 0)
+            {
+                return ServiceResponse<bool>.Fail(
+                    "Không thể xóa danh mục trong database.", 
+                    HttpStatusCode.InternalServerError);
+            }
 
             return ServiceResponse<bool>.Success(true, "Xóa mềm danh mục thành công.");
         }

@@ -141,5 +141,18 @@ namespace eCommerceApp.Infrastructure.Repositories.Authentication
             
             return await context.SaveChangesAsync();
         }
+
+        public async Task<int> CleanupExpiredTokens()
+        {
+            var expiredTokens = await context.RefreshTokens
+                .Where(_ => _.ExpiresAt < DateTime.UtcNow || _.IsRevoked)
+                .ToListAsync();
+            
+            if (!expiredTokens.Any())
+                return 0;
+
+            context.RefreshTokens.RemoveRange(expiredTokens);
+            return await context.SaveChangesAsync();
+        }
     }
 }

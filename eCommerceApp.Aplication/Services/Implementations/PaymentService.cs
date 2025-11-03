@@ -1,6 +1,7 @@
 ﻿using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Payment;
 using eCommerceApp.Aplication.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Interfaces.Logging;
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Repositories;
@@ -20,6 +21,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IPayOSService _payOSService;
         private readonly IConfiguration _configuration;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IAppLogger<PaymentService> _logger; // ✅ New: Structured logging
 
         public PaymentService(
             IPaymentRepository paymentRepository,
@@ -27,7 +29,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
             IShopRepository shopRepository,
             IPayOSService payOSService,
             IConfiguration configuration,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor,
+            IAppLogger<PaymentService> logger) // ✅ New: Inject IAppLogger
         {
             _paymentRepository = paymentRepository;
             _orderRepository = orderRepository;
@@ -35,6 +38,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _payOSService = payOSService;
             _configuration = configuration;
             _httpContextAccessor = httpContextAccessor;
+            _logger = logger;
         }
 
         // ✅ Helper method để check admin role
@@ -166,10 +170,12 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     order.UpdatedAt = DateTime.UtcNow;
                     await _orderRepository.UpdateOrderAsync(order);
 
-                    // ✅ Note: Transaction được quản lý bởi UnitOfWork hoặc repository layer
-                    // Các repository methods không tự động save để UnitOfWork quản lý
+                // ✅ Note: Transaction được quản lý bởi UnitOfWork hoặc repository layer
+                // Các repository methods không tự động save để UnitOfWork quản lý
 
-                    return ServiceResponse<PayOSCreatePaymentResponse>.Success(
+                _logger.LogInformation($"COD payment processed successfully: OrderId={orderId}, PaymentId={payment.PaymentId}, Amount={payment.Amount}");
+
+                return ServiceResponse<PayOSCreatePaymentResponse>.Success(
                         new PayOSCreatePaymentResponse { Code = 0, Desc = "Thanh toán COD thành công." },
                         "Thanh toán thành công.");
                 }
@@ -263,6 +269,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
                     // ✅ Note: Transaction được quản lý bởi UnitOfWork hoặc repository layer
 
+                    _logger.LogInformation($"Payment link created: OrderId={orderId}, PaymentId={payment.PaymentId}, OrderCode={orderCode}, Amount={payment.Amount}, ExpiredAt={expiredAt}");
+
                     return ServiceResponse<PayOSCreatePaymentResponse>.Success(
                         payOSResponse,
                         "Tạo payment link thành công. Vui lòng thanh toán.");
@@ -270,6 +278,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, $"Failed to process payment: OrderId={orderId}, Method={method}, UserId={userId}, Error={ex.Message}");
                 return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                     $"Lỗi khi xử lý thanh toán: {ex.Message}",
                     HttpStatusCode.InternalServerError);
@@ -488,10 +497,12 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     }
                 }
 
+                _logger.LogInformation($"Webhook processed successfully: OrderCode={webhook.Data.OrderCode}, PaymentId={payment.PaymentId}, Status={newStatus}");
                 return ServiceResponse<bool>.Success(true, "Webhook processed successfully.");
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, $"Failed to process webhook: OrderCode={webhook.Data?.OrderCode}, Error={ex.Message}");
                 return ServiceResponse<bool>.Fail(
                     $"Lỗi khi xử lý webhook: {ex.Message}",
                     HttpStatusCode.InternalServerError);
@@ -995,10 +1006,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     }
                 }
 
+                if (expiredCount > 0)
+                {
+                    _logger.LogInformation($"Expired {expiredCount} payment links automatically");
+                }
                 return ServiceResponse<int>.Success(expiredCount, $"Đã expire {expiredCount} payment links.");
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, $"Failed to expire payment links: Error={ex.Message}");
                 return ServiceResponse<int>.Fail(
                     $"Lỗi khi expire payment links: {ex.Message}",
                     HttpStatusCode.InternalServerError);

@@ -14,11 +14,16 @@ namespace eCommerceApp.Aplication.Services.Implementations
     {
         private readonly IShopCategoryRepository _shopCategoryRepository;
         private readonly IMapper _mapper;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public ShopCategoryService(IShopCategoryRepository shopCategoryRepository, IMapper mapper)
+        public ShopCategoryService(
+            IShopCategoryRepository shopCategoryRepository, 
+            IMapper mapper,
+            IUnitOfWork unitOfWork)
         {
             _shopCategoryRepository = shopCategoryRepository;
             _mapper = mapper;
+            _unitOfWork = unitOfWork;
         }
 
         // --- 1. CREATE: Seller tạo danh mục riêng cho Shop ---
@@ -58,6 +63,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
             category.IsDeleted = false;
 
             await _shopCategoryRepository.AddAsync(category);
+            
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            if (saved <= 0)
+            {
+                return ServiceResponse<GetShopCategory>.Fail(
+                    "Không thể lưu danh mục vào database.", 
+                    HttpStatusCode.InternalServerError);
+            }
 
             var categoryDto = _mapper.Map<GetShopCategory>(category);
             return ServiceResponse<GetShopCategory>.Success(categoryDto, "Tạo danh mục Shop thành công.");
@@ -137,6 +151,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
             category.UpdatedAt = DateTime.UtcNow;
             await _shopCategoryRepository.UpdateAsync(category);
 
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            if (saved <= 0)
+            {
+                return ServiceResponse<bool>.Fail(
+                    "Không thể cập nhật danh mục vào database.", 
+                    HttpStatusCode.InternalServerError);
+            }
+
             return ServiceResponse<bool>.Success(true, "Cập nhật danh mục Shop thành công.");
         }
 
@@ -166,6 +189,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
             category.IsDeleted = true;
             category.UpdatedAt = DateTime.UtcNow;
             await _shopCategoryRepository.UpdateAsync(category);
+
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            if (saved <= 0)
+            {
+                return ServiceResponse<bool>.Fail(
+                    "Không thể xóa danh mục trong database.", 
+                    HttpStatusCode.InternalServerError);
+            }
 
             return ServiceResponse<bool>.Success(true, "Xóa mềm danh mục Shop thành công.");
         }

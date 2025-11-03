@@ -42,5 +42,8 @@ namespace eCommerceApp.Domain.Repositories
         
         // ✅ New: Create order with transaction support (for stock reduction)
         Task<Order> CreateOrderWithTransactionAsync(Order order, Func<Task>? beforeSave = null);
+        
+        // ✅ New: Get unpaid orders older than specified time (for auto-cancellation)
+        Task<IEnumerable<Order>> GetUnpaidOrdersOlderThanAsync(TimeSpan olderThan, PaymentMethod? excludePaymentMethod = null);
     }
 }

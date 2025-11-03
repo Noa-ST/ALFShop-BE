@@ -54,7 +54,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
            
 
-            int result = await productRepo.UpdateAsync(product);
+            int result = await productRepo.UpdateStatusAsync(product);
 
             return result > 0
                 ? ServiceResponse.Success("Từ chối sản phẩm thành công. Lý do đã được ghi nhận.")
@@ -81,7 +81,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             product.Status = ProductStatus.Approved;
             product.UpdatedAt = DateTime.UtcNow;
 
-            int result = await productRepo.UpdateAsync(product);
+            int result = await productRepo.UpdateStatusAsync(product);
 
             return result > 0
                 ? ServiceResponse.Success("Duyệt sản phẩm thành công.")

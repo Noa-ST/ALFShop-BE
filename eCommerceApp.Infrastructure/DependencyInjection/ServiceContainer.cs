@@ -11,6 +11,7 @@ using eCommerceApp.Infrastructure.Repositories.Authentication;
 using eCommerceApp.Infrastructure.Service;
 using eCommerceApp.Infrastructure.Realtime;
 using eCommerceApp.Infrastructure.Services;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using eCommerceApp.Aplication.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -98,12 +99,20 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             // ✅ Register UnitOfWork
             services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+            // ✅ Register Background Services
+            services.AddHostedService<RefreshTokenCleanupService>();
+            services.AddHostedService<PaymentLinkExpirationService>(); // ✅ New: Auto-expire payment links
+            services.AddHostedService<OrderExpirationService>(); // ✅ New: Auto-cancel unpaid orders
+
             return services;
         }
 
         public static IApplicationBuilder UseInfrastructureService(this IApplicationBuilder app)
         {
             app.UseMiddleware<ExceptionHandlingMiddleware>();
+            // ✅ Add rate limiting middleware for authentication endpoints
+            // 5 requests per 60 seconds for login/create endpoints
+            app.UseMiddleware<Midleware.RateLimitMiddleware>();
             return app;
         }
     }

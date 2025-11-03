@@ -33,6 +33,9 @@ namespace eCommerceApp.Domain.Interfaces
         // ✅ New: Update product with images in transaction
         Task<int> UpdateWithImagesAsync(Product product, IEnumerable<ProductImage>? newImages);
         
+        // ✅ New: Update product status and save changes
+        Task<int> UpdateStatusAsync(Product product);
+        
         // ✅ New: Recalculate product rating from reviews
         Task<int> RecalculateRatingAsync(Guid productId);
         

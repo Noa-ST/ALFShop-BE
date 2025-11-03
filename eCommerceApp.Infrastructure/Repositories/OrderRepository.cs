@@ -298,5 +298,27 @@ namespace eCommerceApp.Infrastructure.Repositories
                 throw;
             }
         }
+        
+        // ✅ New: Get unpaid orders older than specified time (for auto-cancellation)
+        public async Task<IEnumerable<Order>> GetUnpaidOrdersOlderThanAsync(TimeSpan olderThan, PaymentMethod? excludePaymentMethod = null)
+        {
+            var cutoffTime = DateTime.UtcNow.Subtract(olderThan);
+            
+            var query = _context.Orders
+                .Where(o => o.Status == OrderStatus.Pending
+                    && o.PaymentStatus == PaymentStatus.Pending
+                    && o.CreatedAt < cutoffTime);
+            
+            // Exclude COD orders nếu được chỉ định (COD có thể thanh toán sau)
+            if (excludePaymentMethod.HasValue)
+            {
+                query = query.Where(o => o.PaymentMethod != excludePaymentMethod.Value);
+            }
+            
+            return await query
+                .Include(o => o.Items) // Include items để restore stock khi cancel
+                    .ThenInclude(oi => oi.Product)
+                .ToListAsync();
+        }
     }
 }

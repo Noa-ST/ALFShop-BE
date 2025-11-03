@@ -17,13 +17,20 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IProductRepository _productRepository;
         private readonly IMapper _mapper;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public CartService(ICartRepository cartRepository, IProductRepository productRepository, IMapper mapper, IHttpContextAccessor httpContextAccessor)
+        public CartService(
+            ICartRepository cartRepository, 
+            IProductRepository productRepository, 
+            IMapper mapper, 
+            IHttpContextAccessor httpContextAccessor,
+            IUnitOfWork unitOfWork)
         {
             _cartRepository = cartRepository;
             _productRepository = productRepository;
             _mapper = mapper;
             _httpContextAccessor = httpContextAccessor;
+            _unitOfWork = unitOfWork;
         }
 
         // --- Hàm tiện ích: Lấy Cart hoặc tạo mới ---
@@ -33,7 +40,10 @@ namespace eCommerceApp.Aplication.Services.Implementations
             if (cart == null)
             {
                 cart = new Cart { CustomerId = userId, CreatedAt = DateTime.UtcNow, IsDeleted = false, Items = new List<CartItem>() };
-                await _cartRepository.AddAsync(cart); // Lưu Cart mới vào DB
+                await _cartRepository.AddAsync(cart);
+                
+                // ✅ Fix: Lưu vào database
+                await _unitOfWork.SaveChangesAsync();
             }
             return cart;
         }
@@ -107,6 +117,10 @@ namespace eCommerceApp.Aplication.Services.Implementations
             }
 
             await _cartRepository.UpdateAsync(cart);
+            
+            // ✅ Fix: Lưu vào database
+            await _unitOfWork.SaveChangesAsync();
+            
             return ServiceResponse.Success("Thêm sản phẩm vào giỏ hàng thành công.");
         }
 
@@ -167,6 +181,10 @@ namespace eCommerceApp.Aplication.Services.Implementations
             {
                 existingItem.Quantity = dto.Quantity;
                 await _cartRepository.UpdateAsync(cart);
+                
+                // ✅ Fix: Lưu vào database
+                await _unitOfWork.SaveChangesAsync();
+                
                 return ServiceResponse.Success("Cập nhật giỏ hàng thành công.");
             }
         }

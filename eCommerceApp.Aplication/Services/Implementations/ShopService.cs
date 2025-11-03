@@ -18,17 +18,20 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IMapper _mapper;
         private readonly UserManager<User> _userManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IUnitOfWork _unitOfWork;
 
         public ShopService(
             IShopRepository shopRepository, 
             IMapper mapper,
             UserManager<User> userManager,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor,
+            IUnitOfWork unitOfWork)
         {
             _shopRepository = shopRepository;
             _mapper = mapper;
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
+            _unitOfWork = unitOfWork;
         }
 
         public async Task<ServiceResponse> CreateAsync(CreateShop shop)
@@ -77,8 +80,12 @@ namespace eCommerceApp.Aplication.Services.Implementations
             mappedData.IsDeleted = false;
 
             // Thêm vào DB
-            int result = await _shopRepository.AddAsync(mappedData);
-            return result > 0
+            await _shopRepository.AddAsync(mappedData);
+            
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            
+            return saved > 0
                 ? ServiceResponse.Success("Shop created successfully.")
                 : ServiceResponse.Fail("Failed to create shop.", HttpStatusCode.InternalServerError);
         }
@@ -108,8 +115,12 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _mapper.Map(shop, existing);
             existing.UpdatedAt = DateTime.UtcNow;
 
-            int result = await _shopRepository.UpdateAsync(existing);
-            return result > 0
+            await _shopRepository.UpdateAsync(existing);
+            
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            
+            return saved > 0
                 ? ServiceResponse.Success("Shop updated successfully.")
                 : ServiceResponse.Fail("Failed to update shop.", HttpStatusCode.InternalServerError);
         }
@@ -139,8 +150,12 @@ namespace eCommerceApp.Aplication.Services.Implementations
             entity.IsDeleted = true;
             entity.UpdatedAt = DateTime.UtcNow;
 
-            int result = await _shopRepository.UpdateAsync(entity);
-            return result > 0
+            await _shopRepository.UpdateAsync(entity);
+            
+            // ✅ Fix: Lưu vào database
+            int saved = await _unitOfWork.SaveChangesAsync();
+            
+            return saved > 0
                 ? ServiceResponse.Success("Shop deleted (soft delete).")
                 : ServiceResponse.Fail("Failed to delete shop.", HttpStatusCode.InternalServerError);
         }

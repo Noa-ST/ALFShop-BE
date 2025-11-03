@@ -2,6 +2,7 @@
 using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Order;
 using eCommerceApp.Aplication.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Interfaces.Logging;
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Repositories;
@@ -22,6 +23,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IProductService _productService;
         private readonly IUnitOfWork _unitOfWork; // ✅ Fix: Use IUnitOfWork for transaction support
         private readonly IHttpContextAccessor _httpContextAccessor; // ✅ New: Optimize admin check
+        private readonly ICartService _cartService; // ✅ New: For auto-clear cart after order creation
+        private readonly IAppLogger<OrderService> _logger; // ✅ New: Structured logging
 
         public OrderService(
             IOrderRepository orderRepo,
@@ -31,7 +34,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
             IMapper mapper,
             IProductService productService,
             IUnitOfWork unitOfWork, // ✅ Fix: Inject IUnitOfWork instead of DbContext
-            IHttpContextAccessor httpContextAccessor) // ✅ New: Inject IHttpContextAccessor
+            IHttpContextAccessor httpContextAccessor, // ✅ New: Inject IHttpContextAccessor
+            ICartService cartService, // ✅ New: Inject ICartService for auto-clear cart
+            IAppLogger<OrderService> logger) // ✅ New: Inject IAppLogger for structured logging
         {
             _orderRepo = orderRepo;
             _productRepo = productRepo;
@@ -41,6 +46,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _productService = productService;
             _unitOfWork = unitOfWork;
             _httpContextAccessor = httpContextAccessor;
+            _cartService = cartService;
+            _logger = logger;
         }
 
         // ✅ New: Helper method để check admin role hiệu quả hơn
@@ -197,10 +204,31 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 await _unitOfWork.SaveChangesAsync();
                 await _unitOfWork.CommitTransactionAsync();
 
-                // 10. Load navigation properties để map đúng
+                _logger.LogInformation($"Order created successfully: OrderId={newOrder.Id}, CustomerId={dto.CustomerId}, ShopId={dto.ShopId}, TotalAmount={newOrder.TotalAmount}");
+
+                // 10. ✅ New: Auto-clear cart items đã được đặt hàng (sau khi commit thành công)
+                try
+                {
+                    foreach (var item in orderItems)
+                    {
+                        var removeResult = await _cartService.RemoveItemFromCartAsync(dto.CustomerId, item.ProductId);
+                        if (removeResult.Succeeded)
+                        {
+                            _logger.LogInformation($"Removed product {item.ProductId} from cart after order creation: OrderId={newOrder.Id}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log warning nhưng không fail order creation vì order đã được tạo thành công
+                    _logger.LogWarning($"Failed to clear cart items after order creation: OrderId={newOrder.Id}, Error={ex.Message}");
+                }
+
+                // 11. Load navigation properties để map đúng
                 var orderWithDetails = await _orderRepo.GetByIdAsync(newOrder.Id);
                 if (orderWithDetails == null)
                 {
+                    _logger.LogError(new Exception("Order not found after creation"), $"OrderId={newOrder.Id}");
                     return ServiceResponse<List<OrderResponseDTO>>.Fail(
                         "Lỗi khi tạo đơn hàng.",
                         HttpStatusCode.InternalServerError);
@@ -216,6 +244,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             catch (Exception ex)
             {
                 await _unitOfWork.RollbackTransactionAsync();
+                _logger.LogError(ex, $"Failed to create order: CustomerId={dto.CustomerId}, ShopId={dto.ShopId}, Error={ex.Message}");
                 return ServiceResponse<List<OrderResponseDTO>>.Fail(
                     $"Lỗi khi tạo đơn hàng: {ex.Message}",
                     HttpStatusCode.InternalServerError);
@@ -684,10 +713,12 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 }
 
                 // Validate ownership: Customer chỉ có thể cancel order của mình, Admin có thể cancel tất cả
+                // System có thể cancel tất cả (cho auto-cancellation)
+                var isSystem = userId == "System";
                 var isAdmin = IsAdmin(userId);
                 var isCustomer = order.CustomerId == userId;
 
-                if (!isAdmin && !isCustomer)
+                if (!isSystem && !isAdmin && !isCustomer)
                 {
                     return ServiceResponse<bool>.Fail(
                         "Bạn không có quyền hủy đơn hàng này.",
