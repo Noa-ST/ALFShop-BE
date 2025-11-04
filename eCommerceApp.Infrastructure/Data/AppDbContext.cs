@@ -29,7 +29,7 @@ namespace eCommerceApp.Infrastructure.Data
         public DbSet<Payment> Payments { get; set; } = null!;
         public DbSet<PaymentHistory> PaymentHistories { get; set; } = null!;
         public DbSet<Review> Reviews { get; set; } = null!;
-        public DbSet<Conversation> Conversations { get; set; } = null!; // ✅ Đã sửa
+        public DbSet<Conversation> Conversations { get; set; } = null!;
         public DbSet<Message> Messages { get; set; } = null!;
         public DbSet<ViolationReport> ViolationReports { get; set; } = null!;
         public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
@@ -59,7 +59,7 @@ namespace eCommerceApp.Infrastructure.Data
                 .HasColumnType("float");
 
             modelBuilder.Entity<Promotion>()
-                .Property(p => p.Discount)
+                .Property(p => p.DiscountValue) // Đã đổi tên từ Discount
                 .HasColumnType("decimal(18,2)");
 
             // Độ chính xác cho thuộc tính mới trong Promotion
@@ -117,9 +117,9 @@ namespace eCommerceApp.Infrastructure.Data
 
             modelBuilder.Entity<ShopCategory>()
                 .HasOne(sc => sc.Shop)
-                .WithMany() 
+                .WithMany()
                 .HasForeignKey(sc => sc.ShopId)
-                .OnDelete(DeleteBehavior.Cascade); 
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<ShopCategory>()
                 .HasOne(c => c.Parent)
@@ -308,13 +308,13 @@ namespace eCommerceApp.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Order -> Address / Customer
-            // ❌ SỬA LỖI CS0103: Sửa 'modelModelBuilder' thành 'modelBuilder'
             modelBuilder.Entity<Order>()
                 .HasOne(o => o.ShippingAddress)
                 .WithMany()
                 .HasForeignKey(o => o.AddressId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+           
             modelBuilder.Entity<Order>()
                 .HasOne(o => o.Customer)
                 .WithMany(u => u.Orders)
@@ -340,7 +340,7 @@ namespace eCommerceApp.Infrastructure.Data
             modelBuilder.Entity<User>()
                 .HasIndex(u => u.NormalizedEmail)
                 .IsUnique(false);
-
+           
             modelBuilder.Entity<Promotion>()
                 .HasIndex(p => p.Code)
                 .IsUnique();

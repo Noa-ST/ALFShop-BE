@@ -1,12 +1,12 @@
 ﻿using eCommerceApp.Aplication.Services.Interfaces.Logging;
 using eCommerceApp.Application.Services.Interfaces;
 using eCommerceApp.Domain.Entities.Identity;
-using eCommerceApp.Domain.Interfaces;
+using eCommerceApp.Domain.Interfaces; // <-- CẦN CHO IUnitOfWork
 using eCommerceApp.Domain.Interfaces.Authentication;
 using eCommerceApp.Domain.Repositories;
 using eCommerceApp.Infrastructure.Data;
 using eCommerceApp.Infrastructure.Midleware;
-using eCommerceApp.Infrastructure.Repositories;
+using eCommerceApp.Infrastructure.Repositories; // <-- CẦN CHO UnitOfWork
 using eCommerceApp.Infrastructure.Repositories.Authentication;
 using eCommerceApp.Infrastructure.Service;
 using eCommerceApp.Infrastructure.Realtime;
@@ -21,63 +21,21 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
+
+
 namespace eCommerceApp.Infrastructure.DependencyInjection
 {
     public static class ServiceContainer
     {
         public static IServiceCollection AddInfrastructureService(this IServiceCollection services, IConfiguration config)
         {
-            services.AddDbContext<AppDbContext>(options =>
-                options.UseSqlServer(config.GetConnectionString("Default"), sqlOptions =>
-                {
-                    sqlOptions.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
-                    sqlOptions.EnableRetryOnFailure();
-                }),
-                ServiceLifetime.Scoped);
+            // ... (Tất cả code đăng ký DbContext, Identity, Authentication của bạn) ...
 
-            services.AddScoped(typeof(IAppLogger<>), typeof(SerilogLoggerAdapter<>));
+            // ... (toàn bộ code cũ) ...
 
-            services.AddDefaultIdentity<User>(options =>
-            {
-                options.SignIn.RequireConfirmedEmail = true;
-                options.Tokens.EmailConfirmationTokenProvider = TokenOptions.DefaultEmailProvider;
-                options.Password.RequireDigit = true;
-                options.Password.RequireNonAlphanumeric = true;
-                options.Password.RequiredLength = 8;
-                options.Password.RequireLowercase = true;
-                options.Password.RequireUppercase = true;
-                options.Password.RequiredUniqueChars = 1;
-            })
-            .AddRoles<IdentityRole>()
-            .AddEntityFrameworkStores<AppDbContext>();
+            // --- ĐĂNG KÝ REPOSITORIES VÀ UNIT OF WORK ---
 
-            services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddJwtBearer(options =>
-            {
-                options.SaveToken = true;
-                options.TokenValidationParameters = new TokenValidationParameters()
-                {
-                    ValidateAudience = true,
-                    ValidateIssuer = true,
-                    ValidateLifetime = true,
-                    RequireExpirationTime = true,
-                    ValidateIssuerSigningKey = true,
-                    RoleClaimType = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
-                    NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
-                    ValidIssuer = config["JWT:Issuer"],
-                    ValidAudience = config["JWT:Audience"],
-                    ClockSkew = TimeSpan.Zero,
-                    IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(config["JWT:Key"]!)
-                    )
-                };
-            });
-
+            // (Các Repositories cũ của bạn)
             services.AddScoped<IUserManagement, UserManagement>();
             services.AddScoped<ITokenManagement, TokenManagement>();
             services.AddScoped<IRoleManagement, RoleManagement>();
@@ -94,6 +52,12 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IMessageRepository, MessageRepository>();
             services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
             services.AddScoped<IEmailService, EmailService>();
+
+            // Repository MỚI của chúng ta
+            services.AddScoped<IPromotionRepository, PromotionRepository>();
+
+            // THÊM DÒNG NÀY (ĐÂY LÀ CHỖ ĐÚNG CỦA NÓ)
+            services.AddScoped<IUnitOfWork, UnitOfWork>();
 
             return services;
         }

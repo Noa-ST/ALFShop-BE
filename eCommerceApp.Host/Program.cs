@@ -1,9 +1,11 @@
-﻿using eCommerceApp.Aplication.DependencyInjection;
+﻿using System.Reflection;
+using System.Text.Json.Serialization;
+using eCommerceApp.Aplication.DependencyInjection;
+using eCommerceApp.Aplication.Mapping; // (Tên namespace Mapping của bạn)
 using eCommerceApp.Infrastructure.DependencyInjection;
 using eCommerceApp.Infrastructure.Realtime;
 using Microsoft.OpenApi.Models;
 using Serilog;
-using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +21,7 @@ Log.Logger.Information("Application is building...");
 
 // ---- Application & Infrastructure DI ----
 builder.Services.AddInfrastructureService(builder.Configuration);
-builder.Services.AddApplicationService();
+builder.Services.AddApplicationServices();
 
 // ✅ Đăng ký IHttpContextAccessor để sử dụng trong services
 builder.Services.AddHttpContextAccessor();
@@ -80,6 +82,7 @@ builder.Services.AddCors(opt =>
 // ---- Build app ----
 try
 {
+    builder.Services.AddAutoMapper(Assembly.GetAssembly(typeof(PromotionProfile)));
     var app = builder.Build();
 
     app.UseCors();
