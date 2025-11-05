@@ -32,7 +32,13 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
                 options.UseSqlServer(config.GetConnectionString("Default"), sqlOptions =>
                 {
                     sqlOptions.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
-                    sqlOptions.EnableRetryOnFailure();
+                    // ✅ Fix: Enable retry với execution strategy
+                    // Sử dụng ExecuteInTransactionAsync() trong UnitOfWork để wrap transactions
+                    // đảm bảo tương thích với EnableRetryOnFailure()
+                    sqlOptions.EnableRetryOnFailure(
+                        maxRetryCount: 3,
+                        maxRetryDelay: TimeSpan.FromSeconds(30),
+                        errorNumbersToAdd: null);
                 }),
                 ServiceLifetime.Scoped);
 
@@ -91,8 +97,10 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IAddressRepository, AddressRepository>();
             services.AddScoped<IOrderRepository, OrderRepository>();
             services.AddScoped<IPaymentRepository, PaymentRepository>();
+            services.AddScoped<ISettlementRepository, SettlementRepository>(); // ✅ New
             services.AddScoped<IConversationRepository, ConversationRepository>();
             services.AddScoped<IMessageRepository, MessageRepository>();
+            services.AddScoped<ISellerBalanceRepository, SellerBalanceRepository>(); // ✅ New
             services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
             services.AddScoped<IEmailService, EmailService>();
 

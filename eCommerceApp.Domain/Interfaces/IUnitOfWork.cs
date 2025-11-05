@@ -15,6 +15,7 @@ namespace eCommerceApp.Domain.Interfaces
         IMessageRepository Messages { get; }
         IOrderRepository Orders { get; }
         IPaymentRepository Payments { get; }
+        ISettlementRepository Settlements { get; } // ✅ New
         
         // Repositories (from Domain.Interfaces)
         IProductRepository Products { get; }
@@ -24,12 +25,17 @@ namespace eCommerceApp.Domain.Interfaces
         IGlobalCategoryRepository GlobalCategories { get; }
         IShopCategoryRepository ShopCategories { get; }
         IProductImageRepository ProductImages { get; }
+        ISellerBalanceRepository SellerBalances { get; } // ✅ New
 
         // Transaction management
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
         Task BeginTransactionAsync(CancellationToken cancellationToken = default);
         Task CommitTransactionAsync(CancellationToken cancellationToken = default);
         Task RollbackTransactionAsync(CancellationToken cancellationToken = default);
+        
+        // ✅ New: Execute transaction with execution strategy support
+        // Wraps entire transaction logic in execution strategy to support retry
+        Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> operation, CancellationToken cancellationToken = default);
     }
 }
 

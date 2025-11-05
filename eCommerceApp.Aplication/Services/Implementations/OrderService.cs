@@ -25,6 +25,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IHttpContextAccessor _httpContextAccessor; // ✅ New: Optimize admin check
         private readonly ICartService _cartService; // ✅ New: For auto-clear cart after order creation
         private readonly IAppLogger<OrderService> _logger; // ✅ New: Structured logging
+        private readonly ISettlementService? _settlementService; // ✅ New: For auto-calculate settlement when order Delivered
 
         public OrderService(
             IOrderRepository orderRepo,
@@ -36,7 +37,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
             IUnitOfWork unitOfWork, // ✅ Fix: Inject IUnitOfWork instead of DbContext
             IHttpContextAccessor httpContextAccessor, // ✅ New: Inject IHttpContextAccessor
             ICartService cartService, // ✅ New: Inject ICartService for auto-clear cart
-            IAppLogger<OrderService> logger) // ✅ New: Inject IAppLogger for structured logging
+            IAppLogger<OrderService> logger, // ✅ New: Inject IAppLogger for structured logging
+            ISettlementService? settlementService = null) // ✅ New: Optional - for auto-settlement
         {
             _orderRepo = orderRepo;
             _productRepo = productRepo;
@@ -48,6 +50,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _httpContextAccessor = httpContextAccessor;
             _cartService = cartService;
             _logger = logger;
+            _settlementService = settlementService;
         }
 
         // ✅ New: Helper method để check admin role hiệu quả hơn
@@ -63,11 +66,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
         public async Task<ServiceResponse<List<OrderResponseDTO>>> CreateOrderAsync(OrderCreateDTO dto)
         {
-            // ✅ Fix: Use IUnitOfWork transaction để đảm bảo consistency
-            await _unitOfWork.BeginTransactionAsync();
             try
             {
-                // 1. Validate CustomerId
+                // ✅ Step 1: Validate inputs (không cần transaction)
                 if (string.IsNullOrEmpty(dto.CustomerId))
                 {
                     return ServiceResponse<List<OrderResponseDTO>>.Fail(
@@ -75,7 +76,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.BadRequest);
                 }
 
-                // ✅ New: Validate ShopId exists
                 var shop = await _shopRepo.GetByIdAsync(dto.ShopId);
                 if (shop == null || shop.IsDeleted)
                 {
@@ -84,7 +84,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.BadRequest);
                 }
 
-                // 2. Validate Address
                 var addresses = await _addressRepo.GetUserAddressesAsync(dto.CustomerId);
                 var address = addresses.FirstOrDefault(a => a.Id == dto.AddressId);
                 if (address == null)
@@ -94,7 +93,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.BadRequest);
                 }
 
-                // 3. Validate Items và tính TotalAmount
                 if (dto.Items == null || !dto.Items.Any())
                 {
                     return ServiceResponse<List<OrderResponseDTO>>.Fail(
@@ -102,6 +100,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.BadRequest);
                 }
 
+                // Validate products và tính toán
                 decimal subtotal = 0;
                 var orderItems = new List<OrderItem>();
 
@@ -115,7 +114,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                             HttpStatusCode.BadRequest);
                     }
 
-                    // Validate shop
                     if (product.ShopId != dto.ShopId)
                     {
                         return ServiceResponse<List<OrderResponseDTO>>.Fail(
@@ -123,7 +121,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                             HttpStatusCode.BadRequest);
                     }
 
-                    // Validate stock
                     if (product.StockQuantity < itemDto.Quantity)
                     {
                         return ServiceResponse<List<OrderResponseDTO>>.Fail(
@@ -131,21 +128,18 @@ namespace eCommerceApp.Aplication.Services.Implementations
                             HttpStatusCode.BadRequest);
                     }
 
-                    // Tính tiền
                     decimal itemTotal = product.Price * itemDto.Quantity;
                     subtotal += itemTotal;
 
-                    // Tạo OrderItem
                     orderItems.Add(new OrderItem
                     {
-                        OrderId = Guid.Empty, // Sẽ được set sau khi tạo Order
+                        OrderId = Guid.Empty,
                         ProductId = itemDto.ProductId,
                         Quantity = itemDto.Quantity,
                         PriceAtPurchase = product.Price
                     });
                 }
 
-                // 4. Parse PaymentMethod
                 if (!Enum.TryParse<PaymentMethod>(dto.PaymentMethod, true, out var paymentMethod))
                 {
                     return ServiceResponse<List<OrderResponseDTO>>.Fail(
@@ -153,97 +147,115 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.BadRequest);
                 }
 
-                // 5. Tính TotalAmount
                 decimal totalAmount = subtotal + dto.ShippingFee - dto.DiscountAmount;
                 if (totalAmount < 0)
                 {
                     totalAmount = 0;
                 }
 
-                // 6. Tạo Order
-                var newOrder = new Order
+                // ✅ Step 2: Execute transaction với execution strategy support
+                // Wrap toàn bộ write operations trong transaction với execution strategy
+                var result = await _unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    Id = Guid.NewGuid(),
-                    CustomerId = dto.CustomerId,
-                    ShopId = dto.ShopId,
-                    AddressId = dto.AddressId,
-                    TotalAmount = totalAmount,
-                    ShippingFee = dto.ShippingFee,
-                    DiscountAmount = dto.DiscountAmount,
-                    PromotionCodeUsed = dto.PromotionCode,
-                    PaymentMethod = paymentMethod,
-                    PaymentStatus = PaymentStatus.Pending,
-                    Status = OrderStatus.Pending,
-                    CreatedAt = DateTime.UtcNow,
-                    Items = orderItems
-                };
-
-                // Set OrderId cho OrderItems
-                foreach (var item in orderItems)
-                {
-                    item.OrderId = newOrder.Id;
-                }
-
-                // 7. ✅ Fix: Giảm stock TRƯỚC khi tạo order (trong transaction)
-                foreach (var item in orderItems)
-                {
-                    var stockResult = await _productService.ReduceStockAsync(item.ProductId, item.Quantity);
-                    if (!stockResult.Succeeded)
+                    // Tạo Order
+                    var newOrder = new Order
                     {
-                        await _unitOfWork.RollbackTransactionAsync();
-                        return ServiceResponse<List<OrderResponseDTO>>.Fail(
-                            $"Không thể giảm số lượng tồn kho cho sản phẩm {item.ProductId}. {stockResult.Message}",
-                            HttpStatusCode.BadRequest);
+                        Id = Guid.NewGuid(),
+                        CustomerId = dto.CustomerId,
+                        ShopId = dto.ShopId,
+                        AddressId = dto.AddressId,
+                        TotalAmount = totalAmount,
+                        ShippingFee = dto.ShippingFee,
+                        DiscountAmount = dto.DiscountAmount,
+                        PromotionCodeUsed = dto.PromotionCode,
+                        PaymentMethod = paymentMethod,
+                        PaymentStatus = PaymentStatus.Pending,
+                        Status = OrderStatus.Pending,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow, // ✅ Set UpdatedAt khi tạo order để tránh hiển thị "01/01/0001"
+                        Items = orderItems
+                    };
+
+                    // Set OrderId cho OrderItems
+                    foreach (var item in orderItems)
+                    {
+                        item.OrderId = newOrder.Id;
                     }
-                }
 
-                // 8. Lưu Order (OrderItems sẽ được lưu tự động do cascade)
-                await _orderRepo.CreateOrderAsync(newOrder);
+                    // Giảm stock TRƯỚC khi tạo order (trong transaction)
+                    foreach (var item in orderItems)
+                    {
+                        var stockResult = await _productService.ReduceStockAsync(item.ProductId, item.Quantity);
+                        if (!stockResult.Succeeded)
+                        {
+                            throw new InvalidOperationException(
+                                $"Không thể giảm số lượng tồn kho cho sản phẩm {item.ProductId}. {stockResult.Message}");
+                        }
+                    }
 
-                // 9. Commit transaction
-                await _unitOfWork.SaveChangesAsync();
-                await _unitOfWork.CommitTransactionAsync();
+                    // Lưu Order (OrderItems sẽ được lưu tự động do cascade)
+                    await _orderRepo.CreateOrderAsync(newOrder);
 
-                _logger.LogInformation($"Order created successfully: OrderId={newOrder.Id}, CustomerId={dto.CustomerId}, ShopId={dto.ShopId}, TotalAmount={newOrder.TotalAmount}");
+                    _logger.LogInformation($"Order created successfully: OrderId={newOrder.Id}, CustomerId={dto.CustomerId}, ShopId={dto.ShopId}, TotalAmount={newOrder.TotalAmount}");
 
-                // 10. ✅ New: Auto-clear cart items đã được đặt hàng (sau khi commit thành công)
+                    return newOrder;
+                });
+
+                // ✅ Step 3: Post-transaction operations (sau khi commit thành công)
+                // Auto-clear cart items - only remove ordered items
                 try
                 {
+                    var removedCount = 0;
                     foreach (var item in orderItems)
                     {
                         var removeResult = await _cartService.RemoveItemFromCartAsync(dto.CustomerId, item.ProductId);
                         if (removeResult.Succeeded)
                         {
-                            _logger.LogInformation($"Removed product {item.ProductId} from cart after order creation: OrderId={newOrder.Id}");
+                            removedCount++;
+                            _logger.LogInformation($"Removed product {item.ProductId} from cart after order creation: OrderId={result.Id}");
                         }
+                        else
+                        {
+                            _logger.LogWarning($"Failed to remove product {item.ProductId} from cart: OrderId={result.Id}, Message={removeResult.Message}");
+                        }
+                    }
+                    
+                    if (removedCount > 0)
+                    {
+                        _logger.LogInformation($"Successfully removed {removedCount}/{orderItems.Count} items from cart: OrderId={result.Id}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Log warning nhưng không fail order creation vì order đã được tạo thành công
-                    _logger.LogWarning($"Failed to clear cart items after order creation: OrderId={newOrder.Id}, Error={ex.Message}");
+                    _logger.LogWarning($"Exception while clearing cart items: OrderId={result.Id}, Error={ex.Message}");
                 }
 
-                // 11. Load navigation properties để map đúng
-                var orderWithDetails = await _orderRepo.GetByIdAsync(newOrder.Id);
+                // Load navigation properties để map đúng
+                var orderWithDetails = await _orderRepo.GetByIdAsync(result.Id);
                 if (orderWithDetails == null)
                 {
-                    _logger.LogError(new Exception("Order not found after creation"), $"OrderId={newOrder.Id}");
+                    _logger.LogError(new Exception("Order not found after creation"), $"OrderId={result.Id}");
                     return ServiceResponse<List<OrderResponseDTO>>.Fail(
                         "Lỗi khi tạo đơn hàng.",
                         HttpStatusCode.InternalServerError);
                 }
 
-                // Map order với navigation properties đã được load
                 var orderDto = _mapper.Map<OrderResponseDTO>(orderWithDetails);
 
                 return ServiceResponse<List<OrderResponseDTO>>.Success(
                     new List<OrderResponseDTO> { orderDto },
                     "Tạo đơn hàng thành công.");
             }
+            catch (InvalidOperationException ex)
+            {
+                // Validation errors từ transaction
+                _logger.LogError(ex, $"Failed to create order: CustomerId={dto.CustomerId}, ShopId={dto.ShopId}");
+                return ServiceResponse<List<OrderResponseDTO>>.Fail(
+                    ex.Message,
+                    HttpStatusCode.BadRequest);
+            }
             catch (Exception ex)
             {
-                await _unitOfWork.RollbackTransactionAsync();
                 _logger.LogError(ex, $"Failed to create order: CustomerId={dto.CustomerId}, ShopId={dto.ShopId}, Error={ex.Message}");
                 return ServiceResponse<List<OrderResponseDTO>>.Fail(
                     $"Lỗi khi tạo đơn hàng: {ex.Message}",
@@ -486,6 +498,60 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
                 // 4. Update status
                 await _orderRepo.UpdateStatusAsync(id, dto.Status);
+                
+                // ✅ Fix: Save changes to database
+                await _unitOfWork.SaveChangesAsync();
+
+                // ✅ New: Auto-update payment status to Paid when order is Delivered and is COD/Cash
+                if (parsedNewStatus == OrderStatus.Delivered && 
+                    currentStatus != OrderStatus.Delivered && 
+                    order.PaymentStatus == PaymentStatus.Pending &&
+                    (order.PaymentMethod == PaymentMethod.COD || order.PaymentMethod == PaymentMethod.Cash))
+                {
+                    try
+                    {
+                        order.PaymentStatus = PaymentStatus.Paid;
+                        order.UpdatedAt = DateTime.UtcNow;
+                        
+                        await _unitOfWork.SaveChangesAsync();
+                        
+                        _logger.LogInformation(
+                            $"Auto-updated payment status to Paid for COD/Cash order: OrderId={id}, PaymentMethod={order.PaymentMethod}");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error nhưng không fail status update
+                        _logger.LogWarning(
+                            ex, 
+                            $"Failed to auto-update payment status for COD/Cash order: OrderId={id}, Error={ex.Message}");
+                    }
+                }
+
+                // ✅ New: Auto-calculate settlement khi order được Delivered
+                if (parsedNewStatus == OrderStatus.Delivered && currentStatus != OrderStatus.Delivered && _settlementService != null)
+                {
+                    try
+                    {
+                        // Chỉ tính settlement nếu order đã Paid
+                        if (order.PaymentStatus == PaymentStatus.Paid)
+                        {
+                            var settlementResult = await _settlementService.CalculateSettlementForOrderAsync(id);
+                            if (settlementResult.Succeeded)
+                            {
+                                _logger.LogInformation($"Auto-calculated settlement for order: OrderId={id}");
+                            }
+                            else
+                            {
+                                _logger.LogWarning($"Failed to auto-calculate settlement for order: OrderId={id}, Reason={settlementResult.Message}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error nhưng không fail status update
+                        _logger.LogError(ex, $"Error auto-calculating settlement for order: OrderId={id}, Error={ex.Message}");
+                    }
+                }
 
                 // ✅ Fix: Restore stock khi order bị cancel (trong transaction nếu có thể)
                 if (parsedNewStatus == OrderStatus.Canceled && currentStatus != OrderStatus.Canceled)
@@ -813,6 +879,108 @@ namespace eCommerceApp.Aplication.Services.Implementations
             {
                 return ServiceResponse<bool>.Fail(
                     $"Lỗi khi cập nhật mã vận chuyển: {ex.Message}",
+                    HttpStatusCode.InternalServerError);
+            }
+        }
+
+        // ✅ New: Customer Confirm Delivery
+        public async Task<ServiceResponse<bool>> ConfirmDeliveryAsync(Guid id, string userId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Không thể xác định người dùng.",
+                        HttpStatusCode.Unauthorized);
+                }
+
+                // 1. Validate order exists
+                var order = await _orderRepo.GetByIdAsync(id);
+                if (order == null)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Không tìm thấy đơn hàng.",
+                        HttpStatusCode.NotFound);
+                }
+
+                // 2. Validate ownership: Chỉ Customer của đơn hàng mới có thể confirm delivery
+                var isCustomer = order.CustomerId == userId;
+                if (!isCustomer)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Bạn không có quyền xác nhận nhận hàng cho đơn hàng này. Chỉ khách hàng sở hữu đơn hàng mới có thể xác nhận.",
+                        HttpStatusCode.Forbidden);
+                }
+
+                // 3. Validate status: Chỉ có thể confirm delivery khi order đã được shipped
+                if (order.Status != OrderStatus.Shipped)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        $"Không thể xác nhận nhận hàng. Đơn hàng phải ở trạng thái Shipped. Trạng thái hiện tại: {order.Status}",
+                        HttpStatusCode.BadRequest);
+                }
+
+                // 4. Update status to Delivered
+                await _orderRepo.UpdateStatusAsync(id, OrderStatus.Delivered.ToString());
+                await _unitOfWork.SaveChangesAsync();
+
+                // 5. ✅ Auto-update payment status to Paid when order is Delivered and is COD/Cash
+                if (order.PaymentStatus == PaymentStatus.Pending &&
+                    (order.PaymentMethod == PaymentMethod.COD || order.PaymentMethod == PaymentMethod.Cash))
+                {
+                    try
+                    {
+                        order.PaymentStatus = PaymentStatus.Paid;
+                        order.UpdatedAt = DateTime.UtcNow;
+                        await _unitOfWork.SaveChangesAsync();
+                        
+                        _logger.LogInformation(
+                            $"Auto-updated payment status to Paid for COD/Cash order after customer confirm delivery: OrderId={id}, PaymentMethod={order.PaymentMethod}");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error nhưng không fail delivery confirmation
+                        _logger.LogWarning(
+                            ex, 
+                            $"Failed to auto-update payment status for COD/Cash order after customer confirm delivery: OrderId={id}, Error={ex.Message}");
+                    }
+                }
+
+                // 6. ✅ Auto-calculate settlement khi order được Delivered
+                if (_settlementService != null)
+                {
+                    try
+                    {
+                        // Chỉ tính settlement nếu order đã Paid
+                        if (order.PaymentStatus == PaymentStatus.Paid)
+                        {
+                            var settlementResult = await _settlementService.CalculateSettlementForOrderAsync(id);
+                            if (settlementResult.Succeeded)
+                            {
+                                _logger.LogInformation($"Auto-calculated settlement for order after customer confirm delivery: OrderId={id}");
+                            }
+                            else
+                            {
+                                _logger.LogWarning($"Failed to auto-calculate settlement for order after customer confirm delivery: OrderId={id}, Reason={settlementResult.Message}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error nhưng không fail delivery confirmation
+                        _logger.LogError(ex, $"Error auto-calculating settlement for order after customer confirm delivery: OrderId={id}, Error={ex.Message}");
+                    }
+                }
+
+                _logger.LogInformation($"Customer confirmed delivery successfully: OrderId={id}, CustomerId={userId}");
+                return ServiceResponse<bool>.Success(true, "Xác nhận nhận hàng thành công.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to confirm delivery: OrderId={id}, UserId={userId}, Error={ex.Message}");
+                return ServiceResponse<bool>.Fail(
+                    $"Lỗi khi xác nhận nhận hàng: {ex.Message}",
                     HttpStatusCode.InternalServerError);
             }
         }

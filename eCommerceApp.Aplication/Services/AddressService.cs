@@ -18,11 +18,13 @@ namespace eCommerceApp.Aplication.Services.Implementations
     {
         private readonly IAddressRepository _addressRepository;
         private readonly IMapper _mapper;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public AddressService(IAddressRepository addressRepository, IMapper mapper)
+        public AddressService(IAddressRepository addressRepository, IMapper mapper, IUnitOfWork unitOfWork)
         {
             _addressRepository = addressRepository;
             _mapper = mapper;
+            _unitOfWork = unitOfWork;
         }
 
         // ✅ POST /api/Address/create
@@ -90,7 +92,10 @@ namespace eCommerceApp.Aplication.Services.Implementations
             // 4. Lưu address mới
             await _addressRepository.AddAsync(address);
 
-            // 5. ✅ Nếu dto.IsDefault = true, đảm bảo set làm default (đã set ở trên)
+            // 5. ✅ Commit vào database
+            await _unitOfWork.SaveChangesAsync();
+
+            // 6. ✅ Nếu dto.IsDefault = true, đảm bảo set làm default (đã set ở trên)
             // Không cần gọi SetDefaultAddressAsync vì address chưa có Id trong DB
 
             return ServiceResponse.Success("Thêm địa chỉ giao hàng thành công.");
@@ -143,36 +148,30 @@ namespace eCommerceApp.Aplication.Services.Implementations
             bool shouldSetDefault = dto.IsDefault && !existingAddress.IsDefault;
             bool shouldUnsetDefault = !dto.IsDefault && existingAddress.IsDefault;
 
-            if (shouldSetDefault)
-            {
-                // Nếu muốn set làm default, hủy default của các address khác trước
-                await _addressRepository.SetDefaultAddressAsync(userId, addressId);
-            }
-            else if (shouldUnsetDefault)
-            {
-                // Nếu muốn hủy default, hủy default của address này
-                existingAddress.IsDefault = false;
-                // Tự động set address khác làm default (nếu có)
-                await _addressRepository.SetFirstAddressAsDefaultAsync(userId);
-            }
-
-            // 3. Ánh xạ và cập nhật (nhưng không map IsDefault nếu đã xử lý ở trên)
-            var wasDefault = existingAddress.IsDefault;
+            // 3. Ánh xạ và cập nhật các field từ DTO (trước khi xử lý IsDefault)
             _mapper.Map(dto, existingAddress);
-            
-            // ✅ Đảm bảo IsDefault đã được set đúng từ logic trên
+            existingAddress.UpdatedAt = DateTime.UtcNow;
+
+            // 4. Xử lý logic IsDefault và unset/set default cho các address khác
             if (shouldSetDefault)
             {
+                // Nếu muốn set làm default, hủy default của các address khác
+                await _addressRepository.UnsetAllDefaultsAsync(userId);
                 existingAddress.IsDefault = true;
             }
             else if (shouldUnsetDefault)
             {
+                // Nếu muốn hủy default của address này
                 existingAddress.IsDefault = false;
+                // Tự động set address khác làm default (nếu có)
+                await _addressRepository.SetFirstAddressAsDefaultAsync(userId);
             }
-            
-            existingAddress.UpdatedAt = DateTime.UtcNow;
+            // Nếu IsDefault không thay đổi, giữ nguyên giá trị hiện tại
 
+            // 5. Update address và commit vào database
             await _addressRepository.UpdateAsync(existingAddress);
+            await _unitOfWork.SaveChangesAsync();
+
             return ServiceResponse.Success("Cập nhật địa chỉ thành công.");
         }
 
@@ -200,12 +199,15 @@ namespace eCommerceApp.Aplication.Services.Implementations
             existingAddress.IsDeleted = true;
             existingAddress.UpdatedAt = DateTime.UtcNow;
             await _addressRepository.UpdateAsync(existingAddress);
+            
+            // ✅ Commit soft delete vào database
+            await _unitOfWork.SaveChangesAsync();
 
             // 4. ✅ Fix: Nếu xóa địa chỉ mặc định, tự động đặt địa chỉ khác làm mặc định (nếu có)
             if (wasDefault)
             {
                 var setSuccess = await _addressRepository.SetFirstAddressAsDefaultAsync(userId);
-                // Không cần thông báo nếu không có address nào để set làm default
+                // SetFirstAddressAsDefaultAsync() đã có SaveChangesAsync() bên trong
             }
 
             return ServiceResponse.Success("Xóa địa chỉ thành công.");

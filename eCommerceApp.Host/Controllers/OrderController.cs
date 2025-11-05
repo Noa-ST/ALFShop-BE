@@ -276,5 +276,32 @@ namespace eCommerceApp.Host.Controllers
                 return Unauthorized(new { message = ex.Message });
             }
         }
+
+        // ✅ New: Customer Confirm Delivery
+        [HttpPost("{id:guid}/confirm-delivery")]
+        [Authorize]
+        [ProducesResponseType(typeof(ServiceResponse<bool>), (int)HttpStatusCode.OK)]
+        [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+        [ProducesResponseType((int)HttpStatusCode.NotFound)]
+        [ProducesResponseType((int)HttpStatusCode.Unauthorized)]
+        [ProducesResponseType((int)HttpStatusCode.Forbidden)]
+        public async Task<IActionResult> ConfirmDelivery(Guid id)
+        {
+            if (id == Guid.Empty)
+            {
+                return BadRequest(new { Message = "OrderId không hợp lệ." });
+            }
+
+            try
+            {
+                var userId = GetUserId();
+                var response = await _orderService.ConfirmDeliveryAsync(id, userId);
+                return StatusCode((int)response.StatusCode, response);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
     }
 }

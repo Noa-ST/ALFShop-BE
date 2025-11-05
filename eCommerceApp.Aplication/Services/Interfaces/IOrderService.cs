@@ -23,6 +23,9 @@ namespace eCommerceApp.Aplication.Services.Interfaces
         
         // ✅ New: Update Tracking Number
         Task<ServiceResponse<bool>> UpdateTrackingNumberAsync(Guid id, string trackingNumber, string userId);
+        
+        // ✅ New: Customer Confirm Delivery
+        Task<ServiceResponse<bool>> ConfirmDeliveryAsync(Guid id, string userId);
     }
 }
 

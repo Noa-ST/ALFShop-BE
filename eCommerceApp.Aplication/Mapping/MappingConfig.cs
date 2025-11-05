@@ -134,9 +134,10 @@ namespace eCommerceApp.Aplication.Mapping
 
             // CartItem Entity -> GetCartItemDto
             CreateMap<CartItem, GetCartItemDto>()
-                // Bỏ qua các trường tính toán (ProductName, ShopName, UnitPrice, ItemTotal)
-                // vì chúng được tính toán và ánh xạ thủ công trong CartService
+                // Bỏ qua các trường tính toán (ProductName, ShopId, ShopName, UnitPrice, ItemTotal)
+                // vì chúng được tính toán và ánh xạ thủ công trong CartService từ Product entity
                 .ForMember(dest => dest.ProductName, opt => opt.Ignore())
+                .ForMember(dest => dest.ShopId, opt => opt.Ignore()) // ✅ Added: Ignore ShopId (map manually from Product.ShopId)
                 .ForMember(dest => dest.ShopName, opt => opt.Ignore())
                 .ForMember(dest => dest.UnitPrice, opt => opt.Ignore())
                 .ForMember(dest => dest.ItemTotal, opt => opt.Ignore())

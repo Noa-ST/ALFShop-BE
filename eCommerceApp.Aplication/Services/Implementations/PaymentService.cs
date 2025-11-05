@@ -22,6 +22,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly IConfiguration _configuration;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IAppLogger<PaymentService> _logger; // ✅ New: Structured logging
+        private readonly IUnitOfWork _unitOfWork; // ✅ Fix: Inject UnitOfWork để quản lý transaction và SaveChanges
 
         public PaymentService(
             IPaymentRepository paymentRepository,
@@ -30,7 +31,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
             IPayOSService payOSService,
             IConfiguration configuration,
             IHttpContextAccessor httpContextAccessor,
-            IAppLogger<PaymentService> logger) // ✅ New: Inject IAppLogger
+            IAppLogger<PaymentService> logger,
+            IUnitOfWork unitOfWork) // ✅ Fix: Inject IUnitOfWork
         {
             _paymentRepository = paymentRepository;
             _orderRepository = orderRepository;
@@ -39,6 +41,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _configuration = configuration;
             _httpContextAccessor = httpContextAccessor;
             _logger = logger;
+            _unitOfWork = unitOfWork;
         }
 
         // ✅ Helper method để check admin role
@@ -72,14 +75,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 {
                     return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                         "Tổng tiền đơn hàng phải lớn hơn 0.",
-                        HttpStatusCode.BadRequest);
-                }
-
-                // ✅ New: Validate Order status - không thể thanh toán order đã Delivered
-                if (order.Status == OrderStatus.Delivered)
-                {
-                    return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
-                        "Không thể thanh toán cho đơn hàng đã được giao.",
                         HttpStatusCode.BadRequest);
                 }
 
@@ -121,68 +116,86 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.BadRequest);
                 }
 
+                // ✅ New: Validate Order status - không thể thanh toán online cho order đã Delivered
+                // ✅ Fix: Với COD/Cash, cho phép thanh toán khi Delivered (vì COD thanh toán khi nhận hàng)
+                if (order.Status == OrderStatus.Delivered)
+                {
+                    // ✅ Cho phép COD/Cash khi Delivered (thanh toán khi nhận hàng)
+                    // ✅ Chặn online payment khi Delivered (đã qua giai đoạn thanh toán online)
+                    if (paymentMethod != PaymentMethod.COD && paymentMethod != PaymentMethod.Cash)
+                    {
+                        return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
+                            "Không thể thanh toán online cho đơn hàng đã được giao.",
+                            HttpStatusCode.BadRequest);
+                    }
+                    // Nếu là COD/Cash, tiếp tục xử lý (không return error)
+                }
+
                 // 5. Xử lý theo phương thức thanh toán
                 if (paymentMethod == PaymentMethod.COD || paymentMethod == PaymentMethod.Cash)
                 {
-                    // COD/Cash: Tạo payment trực tiếp, không cần PayOS
-                    var payment = existingPayment ?? new Payment
+                    // ✅ Fix: Wrap COD payment processing trong transaction với execution strategy support
+                    var payment = await _unitOfWork.ExecuteInTransactionAsync(async () =>
                     {
-                        PaymentId = Guid.NewGuid(),
-                        OrderId = orderId,
-                        Method = paymentMethod,
-                        Status = PaymentStatus.Paid,
-                        Amount = order.TotalAmount, // ✅ Validate: Amount = Order.TotalAmount
-                        RefundedAmount = 0,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
+                        // COD/Cash: Tạo payment trực tiếp, không cần PayOS
+                        Payment paymentEntity;
+                        if (existingPayment == null)
+                        {
+                            paymentEntity = new Payment
+                            {
+                                PaymentId = Guid.NewGuid(),
+                                OrderId = orderId,
+                                Method = paymentMethod,
+                                Status = PaymentStatus.Paid,
+                                Amount = order.TotalAmount, // ✅ Validate: Amount = Order.TotalAmount
+                                RefundedAmount = 0,
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            await _paymentRepository.AddAsync(paymentEntity);
+                        }
+                        else
+                        {
+                            // ✅ Fix: Update Amount nếu order total thay đổi
+                            existingPayment.Status = PaymentStatus.Paid;
+                            existingPayment.Method = paymentMethod;
+                            existingPayment.Amount = order.TotalAmount;
+                            existingPayment.UpdatedAt = DateTime.UtcNow;
+                            await _paymentRepository.UpdatePaymentAsync(existingPayment);
+                            paymentEntity = existingPayment;
+                        }
 
-                    if (existingPayment == null)
-                    {
-                        await _paymentRepository.AddAsync(payment);
-                    }
-                    else
-                    {
-                        // ✅ Fix: Update Amount nếu order total thay đổi
-                        existingPayment.Status = PaymentStatus.Paid;
-                        existingPayment.Method = paymentMethod;
-                        existingPayment.Amount = order.TotalAmount;
-                        existingPayment.UpdatedAt = DateTime.UtcNow;
-                        await _paymentRepository.UpdatePaymentAsync(existingPayment);
-                        payment = existingPayment;
-                    }
+                        // Lưu history
+                        await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                        {
+                            HistoryId = Guid.NewGuid(),
+                            PaymentId = paymentEntity.PaymentId,
+                            OldStatus = existingPayment?.Status ?? PaymentStatus.Pending,
+                            NewStatus = PaymentStatus.Paid,
+                            Reason = $"Thanh toán {paymentMethod}",
+                            ChangedBy = "System",
+                            CreatedAt = DateTime.UtcNow
+                        });
 
-                    // Lưu history
-                    await _paymentRepository.AddHistoryAsync(new PaymentHistory
-                    {
-                        HistoryId = Guid.NewGuid(),
-                        PaymentId = payment.PaymentId,
-                        OldStatus = existingPayment?.Status ?? PaymentStatus.Pending,
-                        NewStatus = PaymentStatus.Paid,
-                        Reason = $"Thanh toán {paymentMethod}",
-                        ChangedBy = "System",
-                        CreatedAt = DateTime.UtcNow
+                        // Update Order
+                        order.PaymentStatus = PaymentStatus.Paid;
+                        order.PaymentMethod = paymentMethod;
+                        order.UpdatedAt = DateTime.UtcNow;
+                        await _orderRepository.UpdateOrderAsync(order);
+
+                        return paymentEntity;
                     });
 
-                    // Update Order
-                    order.PaymentStatus = PaymentStatus.Paid;
-                    order.PaymentMethod = paymentMethod;
-                    order.UpdatedAt = DateTime.UtcNow;
-                    await _orderRepository.UpdateOrderAsync(order);
+                    _logger.LogInformation($"COD payment processed successfully: OrderId={orderId}, PaymentId={payment.PaymentId}, Amount={payment.Amount}");
 
-                // ✅ Note: Transaction được quản lý bởi UnitOfWork hoặc repository layer
-                // Các repository methods không tự động save để UnitOfWork quản lý
-
-                _logger.LogInformation($"COD payment processed successfully: OrderId={orderId}, PaymentId={payment.PaymentId}, Amount={payment.Amount}");
-
-                return ServiceResponse<PayOSCreatePaymentResponse>.Success(
-                        new PayOSCreatePaymentResponse { Code = 0, Desc = "Thanh toán COD thành công." },
-                        "Thanh toán thành công.");
+                    return ServiceResponse<PayOSCreatePaymentResponse>.Success(
+                            new PayOSCreatePaymentResponse { Code = 0, Desc = "Thanh toán COD thành công." },
+                            "Thanh toán thành công.");
                 }
                 else
                 {
                     // Online payment (Wallet, Bank): Tạo payment link từ PayOS
-                    // ✅ Fix: Sử dụng GenerateUniqueOrderCodeAsync thay vì GetHashCode
+                    // ✅ Fix: Gọi PayOS TRƯỚC khi bắt đầu transaction (nếu PayOS fail, không cần save gì)
                     var orderCode = await _paymentRepository.GenerateUniqueOrderCodeAsync();
 
                     var frontendUrl = _configuration["PayOS:FrontendUrl"] ?? "http://localhost:3000";
@@ -208,66 +221,89 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
                     var payOSResponse = await _payOSService.CreatePaymentLinkAsync(payOSRequest);
 
-                    if (payOSResponse.Code != 0 || payOSResponse.Data == null)
+                    // ✅ Fix: Validate PayOS response đầy đủ
+                    if (payOSResponse.Code != 0)
                     {
                         return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
-                            $"Lỗi khi tạo payment link: {payOSResponse.Desc}",
+                            $"Lỗi khi tạo payment link từ PayOS: {payOSResponse.Desc} (Code: {payOSResponse.Code})",
                             HttpStatusCode.BadRequest);
                     }
 
-                    // Tạo hoặc cập nhật Payment record
-                    var payment = existingPayment ?? new Payment
+                    if (payOSResponse.Data == null)
                     {
-                        PaymentId = Guid.NewGuid(),
-                        OrderId = orderId,
-                        Method = paymentMethod,
-                        Status = PaymentStatus.Pending,
-                        Amount = order.TotalAmount, // ✅ Validate: Amount = Order.TotalAmount
-                        RefundedAmount = 0,
-                        TransactionId = payOSResponse.Data.PaymentLinkId,
-                        OrderCode = orderCode, // ✅ Fix: Unique OrderCode
-                        PaymentLinkExpiredAt = expiredAt.DateTime, // ✅ New: Track expiry
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-
-                    if (existingPayment == null)
-                    {
-                        await _paymentRepository.AddAsync(payment);
-                    }
-                    else
-                    {
-                        // ✅ Fix: Update Amount và các fields khác
-                        existingPayment.TransactionId = payOSResponse.Data.PaymentLinkId;
-                        existingPayment.OrderCode = orderCode;
-                        existingPayment.Status = PaymentStatus.Pending;
-                        existingPayment.Method = paymentMethod;
-                        existingPayment.Amount = order.TotalAmount; // Update amount
-                        existingPayment.PaymentLinkExpiredAt = expiredAt.DateTime;
-                        existingPayment.UpdatedAt = DateTime.UtcNow;
-                        await _paymentRepository.UpdatePaymentAsync(existingPayment);
-                        payment = existingPayment;
+                        return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
+                            "PayOS trả về response không hợp lệ: Data is null",
+                            HttpStatusCode.BadRequest);
                     }
 
-                    // Lưu history
-                    await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                    if (string.IsNullOrEmpty(payOSResponse.Data.PaymentLinkId))
                     {
-                        HistoryId = Guid.NewGuid(),
-                        PaymentId = payment.PaymentId,
-                        OldStatus = existingPayment?.Status ?? PaymentStatus.Pending,
-                        NewStatus = PaymentStatus.Pending,
-                        Reason = "Tạo payment link từ PayOS",
-                        ChangedBy = "System",
-                        CreatedAt = DateTime.UtcNow
+                        return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
+                            "PayOS trả về response không hợp lệ: PaymentLinkId is empty",
+                            HttpStatusCode.BadRequest);
+                    }
+
+                    // ✅ Note: CheckoutUrl trong PayOSData là long? (có thể là Unix timestamp hoặc ID)
+                    // PayOS có thể trả về CheckoutUrl trong Data hoặc không, nên không bắt buộc validate ở đây
+                    // Chỉ cần validate PaymentLinkId là đủ để tạo payment record
+
+                    // ✅ Fix: Wrap payment creation trong transaction với execution strategy support
+                    var payment = await _unitOfWork.ExecuteInTransactionAsync(async () =>
+                    {
+                        // Tạo hoặc cập nhật Payment record
+                        Payment paymentEntity;
+                        if (existingPayment == null)
+                        {
+                            paymentEntity = new Payment
+                            {
+                                PaymentId = Guid.NewGuid(),
+                                OrderId = orderId,
+                                Method = paymentMethod,
+                                Status = PaymentStatus.Pending,
+                                Amount = order.TotalAmount, // ✅ Validate: Amount = Order.TotalAmount
+                                RefundedAmount = 0,
+                                TransactionId = payOSResponse.Data.PaymentLinkId,
+                                OrderCode = orderCode, // ✅ Fix: Unique OrderCode
+                                PaymentLinkExpiredAt = expiredAt.DateTime, // ✅ New: Track expiry
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            await _paymentRepository.AddAsync(paymentEntity);
+                        }
+                        else
+                        {
+                            // ✅ Fix: Update Amount và các fields khác
+                            existingPayment.TransactionId = payOSResponse.Data.PaymentLinkId;
+                            existingPayment.OrderCode = orderCode;
+                            existingPayment.Status = PaymentStatus.Pending;
+                            existingPayment.Method = paymentMethod;
+                            existingPayment.Amount = order.TotalAmount; // Update amount
+                            existingPayment.PaymentLinkExpiredAt = expiredAt.DateTime;
+                            existingPayment.UpdatedAt = DateTime.UtcNow;
+                            await _paymentRepository.UpdatePaymentAsync(existingPayment);
+                            paymentEntity = existingPayment;
+                        }
+
+                        // Lưu history
+                        await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                        {
+                            HistoryId = Guid.NewGuid(),
+                            PaymentId = paymentEntity.PaymentId,
+                            OldStatus = existingPayment?.Status ?? PaymentStatus.Pending,
+                            NewStatus = PaymentStatus.Pending,
+                            Reason = "Tạo payment link từ PayOS",
+                            ChangedBy = "System",
+                            CreatedAt = DateTime.UtcNow
+                        });
+
+                        // Update Order (chưa paid, đang pending)
+                        order.PaymentStatus = PaymentStatus.Pending;
+                        order.PaymentMethod = paymentMethod;
+                        order.UpdatedAt = DateTime.UtcNow;
+                        await _orderRepository.UpdateOrderAsync(order);
+
+                        return paymentEntity;
                     });
-
-                    // Update Order (chưa paid, đang pending)
-                    order.PaymentStatus = PaymentStatus.Pending;
-                    order.PaymentMethod = paymentMethod;
-                    order.UpdatedAt = DateTime.UtcNow;
-                    await _orderRepository.UpdateOrderAsync(order);
-
-                    // ✅ Note: Transaction được quản lý bởi UnitOfWork hoặc repository layer
 
                     _logger.LogInformation($"Payment link created: OrderId={orderId}, PaymentId={payment.PaymentId}, OrderCode={orderCode}, Amount={payment.Amount}, ExpiredAt={expiredAt}");
 
@@ -329,30 +365,29 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
                 var oldStatus = payment.Status;
 
-                // 3. Update payment status
-                var success = await _paymentRepository.UpdateStatusAsync(paymentId, newStatus);
-                if (!success)
+                // ✅ Fix: Wrap tất cả database operations trong transaction với execution strategy support
+                await _unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    return ServiceResponse<bool>.Fail(
-                        "Không thể cập nhật trạng thái payment.",
-                        HttpStatusCode.InternalServerError);
-                }
+                    // 3. Update payment status
+                    var success = await _paymentRepository.UpdateStatusAsync(paymentId, newStatus);
+                    if (!success)
+                    {
+                        throw new InvalidOperationException("Không thể cập nhật trạng thái payment.");
+                    }
 
-                // 4. Lưu history
-                await _paymentRepository.AddHistoryAsync(new PaymentHistory
-                {
-                    HistoryId = Guid.NewGuid(),
-                    PaymentId = paymentId,
-                    OldStatus = oldStatus,
-                    NewStatus = parsedStatus,
-                    Reason = reason ?? "Cập nhật thủ công",
-                    ChangedBy = changedBy ?? "System",
-                    CreatedAt = DateTime.UtcNow
-                });
+                    // 4. Lưu history
+                    await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                    {
+                        HistoryId = Guid.NewGuid(),
+                        PaymentId = paymentId,
+                        OldStatus = oldStatus,
+                        NewStatus = parsedStatus,
+                        Reason = reason ?? "Cập nhật thủ công",
+                        ChangedBy = changedBy ?? "System",
+                        CreatedAt = DateTime.UtcNow
+                    });
 
-                // 5. Đồng bộ Order.PaymentStatus
-                try
-                {
+                    // 5. Đồng bộ Order.PaymentStatus
                     var order = await _orderRepository.GetByIdAsync(payment.OrderId);
                     if (order != null)
                     {
@@ -360,12 +395,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         order.UpdatedAt = DateTime.UtcNow;
                         await _orderRepository.UpdateOrderAsync(order);
                     }
-                }
-                catch
-                {
-                    // Log warning nhưng không fail toàn bộ operation
-                    // TODO: Log warning
-                }
+
+                    return true;
+                });
 
                 return ServiceResponse<bool>.Success(true, "Cập nhật trạng thái thành công.");
             }
@@ -438,43 +470,42 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     .OrderByDescending(h => h.CreatedAt)
                     .FirstOrDefault(h => h.NewStatus == newStatus && (h.Reason?.Contains("Webhook từ PayOS") ?? false));
 
-                // 5. Chỉ cập nhật nếu status thay đổi và chưa được xử lý
-                if (oldStatus != newStatus && hasRecentStatusChange == null)
+                // Duplicate webhook - đã xử lý rồi, trả về success
+                if (hasRecentStatusChange != null)
                 {
-                    // 6. Update payment status
-                    await _paymentRepository.UpdateStatusAsync(payment.PaymentId, newStatus.ToString());
-
-                    // 7. Cập nhật TransactionId nếu có từ webhook
-                    if (!string.IsNullOrEmpty(webhook.Data.Reference) && payment.TransactionId != webhook.Data.Reference)
-                    {
-                        payment.TransactionId = webhook.Data.Reference;
-                        payment.UpdatedAt = DateTime.UtcNow;
-                        await _paymentRepository.UpdatePaymentAsync(payment);
-                    }
-
-                    // 8. Lưu history
-                    await _paymentRepository.AddHistoryAsync(new PaymentHistory
-                    {
-                        HistoryId = Guid.NewGuid(),
-                        PaymentId = payment.PaymentId,
-                        OldStatus = oldStatus,
-                        NewStatus = newStatus,
-                        Reason = $"Webhook từ PayOS: {webhook.Data.Desc}",
-                        ChangedBy = "PayOS",
-                        CreatedAt = DateTime.UtcNow
-                    });
-                }
-                else if (hasRecentStatusChange != null)
-                {
-                    // Duplicate webhook - đã xử lý rồi, trả về success
                     return ServiceResponse<bool>.Success(true, "Webhook đã được xử lý trước đó.");
                 }
 
-                // 9. Đồng bộ Order.PaymentStatus (chỉ khi status thay đổi)
+                // 5. ✅ Fix: Wrap tất cả database operations trong transaction với execution strategy support
+                // Chỉ cập nhật nếu status thay đổi
                 if (oldStatus != newStatus)
                 {
-                    try
+                    await _unitOfWork.ExecuteInTransactionAsync(async () =>
                     {
+                        // 6. Update payment status
+                        await _paymentRepository.UpdateStatusAsync(payment.PaymentId, newStatus.ToString());
+
+                        // 7. Cập nhật TransactionId nếu có từ webhook
+                        if (!string.IsNullOrEmpty(webhook.Data.Reference) && payment.TransactionId != webhook.Data.Reference)
+                        {
+                            payment.TransactionId = webhook.Data.Reference;
+                            payment.UpdatedAt = DateTime.UtcNow;
+                            await _paymentRepository.UpdatePaymentAsync(payment);
+                        }
+
+                        // 8. Lưu history
+                        await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                        {
+                            HistoryId = Guid.NewGuid(),
+                            PaymentId = payment.PaymentId,
+                            OldStatus = oldStatus,
+                            NewStatus = newStatus,
+                            Reason = $"Webhook từ PayOS: {webhook.Data.Desc}",
+                            ChangedBy = "PayOS",
+                            CreatedAt = DateTime.UtcNow
+                        });
+
+                        // 9. Đồng bộ Order.PaymentStatus
                         var order = await _orderRepository.GetByIdAsync(payment.OrderId);
                         if (order != null)
                         {
@@ -489,12 +520,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
                             
                             await _orderRepository.UpdateOrderAsync(order);
                         }
-                    }
-                    catch
-                    {
-                        // Log warning nhưng không fail toàn bộ operation
-                        // TODO: Log warning - Không thể cập nhật Order
-                    }
+
+                        return true;
+                    });
                 }
 
                 _logger.LogInformation($"Webhook processed successfully: OrderCode={webhook.Data.OrderCode}, PaymentId={payment.PaymentId}, Status={newStatus}");
@@ -611,52 +639,52 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     }
                 }
 
-                // ✅ Fix: Save old status và refunded amount trước khi update
-                var oldStatusForHistory = payment.Status;
-                var oldRefundedAmount = payment.RefundedAmount;
-
-                // Update RefundedAmount
-                payment.RefundedAmount += request.Amount;
-                payment.UpdatedAt = DateTime.UtcNow;
-
-                // 5. Update payment status chỉ khi full refund
-                var newStatus = payment.RefundedAmount >= payment.Amount 
-                    ? PaymentStatus.Failed // Full refund
-                    : PaymentStatus.Paid; // Partial refund, vẫn giữ Paid
-
-                if (newStatus == PaymentStatus.Failed)
+                // ✅ Fix: Wrap tất cả database operations trong transaction với execution strategy support
+                // Gọi PayOS refund TRƯỚC khi bắt đầu transaction (nếu PayOS fail, không cần save gì)
+                await _unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    payment.Status = PaymentStatus.Failed;
-                }
+                    // ✅ Fix: Save old status và refunded amount trước khi update
+                    var oldStatusForHistory = payment.Status;
+                    var oldRefundedAmount = payment.RefundedAmount;
 
-                await _paymentRepository.UpdatePaymentAsync(payment);
+                    // Update RefundedAmount
+                    payment.RefundedAmount += request.Amount;
+                    payment.UpdatedAt = DateTime.UtcNow;
 
-                // 6. Lưu history
-                await _paymentRepository.AddHistoryAsync(new PaymentHistory
-                {
-                    HistoryId = Guid.NewGuid(),
-                    PaymentId = request.PaymentId,
-                    OldStatus = oldStatusForHistory,
-                    NewStatus = newStatus,
-                    Reason = $"Hoàn tiền {request.Amount} VND: {request.Reason}. Tổng đã hoàn: {payment.RefundedAmount} VND (trước đó: {oldRefundedAmount} VND)",
-                    ChangedBy = isAdmin ? "Admin" : "Seller",
-                    CreatedAt = DateTime.UtcNow
-                });
+                    // 5. Update payment status chỉ khi full refund
+                    var newStatus = payment.RefundedAmount >= payment.Amount 
+                        ? PaymentStatus.Failed // Full refund
+                        : PaymentStatus.Paid; // Partial refund, vẫn giữ Paid
 
-                // 7. Update Order
-                try
-                {
+                    if (newStatus == PaymentStatus.Failed)
+                    {
+                        payment.Status = PaymentStatus.Failed;
+                    }
+
+                    await _paymentRepository.UpdatePaymentAsync(payment);
+
+                    // 6. Lưu history
+                    await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                    {
+                        HistoryId = Guid.NewGuid(),
+                        PaymentId = request.PaymentId,
+                        OldStatus = oldStatusForHistory,
+                        NewStatus = newStatus,
+                        Reason = $"Hoàn tiền {request.Amount} VND: {request.Reason}. Tổng đã hoàn: {payment.RefundedAmount} VND (trước đó: {oldRefundedAmount} VND)",
+                        ChangedBy = isAdmin ? "Admin" : "Seller",
+                        CreatedAt = DateTime.UtcNow
+                    });
+
+                    // 7. Update Order
                     if (order != null && newStatus == PaymentStatus.Failed)
                     {
                         order.PaymentStatus = PaymentStatus.Failed;
                         order.UpdatedAt = DateTime.UtcNow;
                         await _orderRepository.UpdateOrderAsync(order);
                     }
-                }
-                catch
-                {
-                    // Log warning
-                }
+
+                    return true;
+                });
 
                 return ServiceResponse<bool>.Success(true, "Hoàn tiền thành công.");
             }
@@ -821,32 +849,31 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.BadRequest);
                 }
 
-                // Update status to Failed
-                await _paymentRepository.UpdateStatusAsync(paymentId, PaymentStatus.Failed.ToString());
-
-                // Lưu history
-                await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                // ✅ Fix: Wrap tất cả database operations trong transaction với execution strategy support
+                await _unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    HistoryId = Guid.NewGuid(),
-                    PaymentId = paymentId,
-                    OldStatus = PaymentStatus.Pending,
-                    NewStatus = PaymentStatus.Failed,
-                    Reason = "Hủy payment link",
-                    ChangedBy = isAdmin ? "Admin" : (isCustomer ? "Customer" : "Seller"),
-                    CreatedAt = DateTime.UtcNow
-                });
+                    // Update status to Failed
+                    await _paymentRepository.UpdateStatusAsync(paymentId, PaymentStatus.Failed.ToString());
 
-                // Update Order
-                try
-                {
+                    // Lưu history
+                    await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                    {
+                        HistoryId = Guid.NewGuid(),
+                        PaymentId = paymentId,
+                        OldStatus = PaymentStatus.Pending,
+                        NewStatus = PaymentStatus.Failed,
+                        Reason = "Hủy payment link",
+                        ChangedBy = isAdmin ? "Admin" : (isCustomer ? "Customer" : "Seller"),
+                        CreatedAt = DateTime.UtcNow
+                    });
+
+                    // Update Order
                     order.PaymentStatus = PaymentStatus.Failed;
                     order.UpdatedAt = DateTime.UtcNow;
                     await _orderRepository.UpdateOrderAsync(order);
-                }
-                catch
-                {
-                    // Log warning
-                }
+
+                    return true;
+                });
 
                 return ServiceResponse<bool>.Success(true, "Hủy payment link thành công.");
             }
@@ -967,42 +994,49 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 var expiredPayments = await _paymentRepository.GetExpiredPaymentLinksAsync();
                 int expiredCount = 0;
 
+                // ✅ Fix: Wrap mỗi payment expiration trong transaction riêng để tránh rollback toàn bộ nếu một payment fail
                 foreach (var (orderId, amount, createdAt) in expiredPayments)
                 {
-                    var payment = await _paymentRepository.GetByOrderIdAsync(orderId);
-                    if (payment != null && payment.Status == PaymentStatus.Pending)
+                    try
                     {
-                        await _paymentRepository.UpdateStatusAsync(payment.PaymentId, PaymentStatus.Failed.ToString());
-                        
-                        // Lưu history
-                        await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                        var payment = await _paymentRepository.GetByOrderIdAsync(orderId);
+                        if (payment != null && payment.Status == PaymentStatus.Pending)
                         {
-                            HistoryId = Guid.NewGuid(),
-                            PaymentId = payment.PaymentId,
-                            OldStatus = PaymentStatus.Pending,
-                            NewStatus = PaymentStatus.Failed,
-                            Reason = "Payment link đã hết hạn",
-                            ChangedBy = "System",
-                            CreatedAt = DateTime.UtcNow
-                        });
-
-                        // Update Order
-                        try
-                        {
-                            var order = await _orderRepository.GetByIdAsync(orderId);
-                            if (order != null)
+                            await _unitOfWork.ExecuteInTransactionAsync(async () =>
                             {
-                                order.PaymentStatus = PaymentStatus.Failed;
-                                order.UpdatedAt = DateTime.UtcNow;
-                                await _orderRepository.UpdateOrderAsync(order);
-                            }
-                        }
-                        catch
-                        {
-                            // Log warning
-                        }
+                                await _paymentRepository.UpdateStatusAsync(payment.PaymentId, PaymentStatus.Failed.ToString());
+                                
+                                // Lưu history
+                                await _paymentRepository.AddHistoryAsync(new PaymentHistory
+                                {
+                                    HistoryId = Guid.NewGuid(),
+                                    PaymentId = payment.PaymentId,
+                                    OldStatus = PaymentStatus.Pending,
+                                    NewStatus = PaymentStatus.Failed,
+                                    Reason = "Payment link đã hết hạn",
+                                    ChangedBy = "System",
+                                    CreatedAt = DateTime.UtcNow
+                                });
 
-                        expiredCount++;
+                                // Update Order
+                                var order = await _orderRepository.GetByIdAsync(orderId);
+                                if (order != null)
+                                {
+                                    order.PaymentStatus = PaymentStatus.Failed;
+                                    order.UpdatedAt = DateTime.UtcNow;
+                                    await _orderRepository.UpdateOrderAsync(order);
+                                }
+
+                                return true;
+                            });
+
+                            expiredCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error nhưng tiếp tục xử lý các payment khác
+                        _logger.LogWarning($"Failed to expire payment link for OrderId={orderId}: {ex.Message}");
                     }
                 }
 

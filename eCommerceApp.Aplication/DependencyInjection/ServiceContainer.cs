@@ -31,6 +31,7 @@ namespace eCommerceApp.Aplication.DependencyInjection
 
             services.AddScoped<IOrderService, OrderService>();
             services.AddScoped<IPaymentService, PaymentService>();
+            services.AddScoped<ISettlementService, SettlementService>(); // ✅ New
             services.AddScoped<IConversationService, ConversationService>();
 
             // PayOS Service - Đăng ký với HttpClient để hỗ trợ HTTP calls

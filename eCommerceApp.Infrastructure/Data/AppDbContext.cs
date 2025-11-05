@@ -33,6 +33,11 @@ namespace eCommerceApp.Infrastructure.Data
         public DbSet<Message> Messages { get; set; } = null!;
         public DbSet<ViolationReport> ViolationReports { get; set; } = null!;
         public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
+        
+        // ✅ New: Settlement entities
+        public DbSet<SellerBalance> SellerBalances { get; set; } = null!;
+        public DbSet<Settlement> Settlements { get; set; } = null!;
+        public DbSet<OrderSettlement> OrderSettlements { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -90,6 +95,51 @@ namespace eCommerceApp.Infrastructure.Data
 
             modelBuilder.Entity<Payment>()
                 .Property(p => p.RefundedAmount)
+                .HasColumnType("decimal(18,2)");
+
+            // ✅ New: Decimal precision for Settlement entities
+            modelBuilder.Entity<SellerBalance>()
+                .Property(sb => sb.AvailableBalance)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<SellerBalance>()
+                .Property(sb => sb.PendingBalance)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<SellerBalance>()
+                .Property(sb => sb.TotalEarned)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<SellerBalance>()
+                .Property(sb => sb.TotalWithdrawn)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<SellerBalance>()
+                .Property(sb => sb.TotalPendingWithdrawal)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<Settlement>()
+                .Property(s => s.Amount)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<Settlement>()
+                .Property(s => s.PlatformFee)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<Settlement>()
+                .Property(s => s.NetAmount)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<OrderSettlement>()
+                .Property(os => os.OrderAmount)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<OrderSettlement>()
+                .Property(os => os.Commission)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<OrderSettlement>()
+                .Property(os => os.SettlementAmount)
                 .HasColumnType("decimal(18,2)");
 
             // ---------- Relationships ----------
@@ -334,6 +384,79 @@ namespace eCommerceApp.Infrastructure.Data
                 .WithMany(u => u.Orders)
                 .HasForeignKey(o => o.CustomerId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // ✅ New: Settlement relationships
+            // SellerBalance -> User (Seller)
+            modelBuilder.Entity<SellerBalance>()
+                .HasOne(sb => sb.Seller)
+                .WithMany()
+                .HasForeignKey(sb => sb.SellerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // SellerBalance -> Shop
+            modelBuilder.Entity<SellerBalance>()
+                .HasOne(sb => sb.Shop)
+                .WithMany()
+                .HasForeignKey(sb => sb.ShopId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Unique constraint: One SellerBalance per Shop
+            modelBuilder.Entity<SellerBalance>()
+                .HasIndex(sb => sb.ShopId)
+                .IsUnique();
+
+            // Settlement -> User (Seller)
+            modelBuilder.Entity<Settlement>()
+                .HasOne(s => s.Seller)
+                .WithMany()
+                .HasForeignKey(s => s.SellerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Settlement -> Shop
+            modelBuilder.Entity<Settlement>()
+                .HasOne(s => s.Shop)
+                .WithMany()
+                .HasForeignKey(s => s.ShopId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Settlement -> User (ProcessedBy - Admin)
+            modelBuilder.Entity<Settlement>()
+                .HasOne(s => s.ProcessedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.ProcessedBy)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
+
+            // Settlement -> OrderSettlements (1:Many)
+            modelBuilder.Entity<OrderSettlement>()
+                .HasOne(os => os.Settlement)
+                .WithMany(s => s.OrderSettlements)
+                .HasForeignKey(os => os.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // OrderSettlement -> Order
+            modelBuilder.Entity<OrderSettlement>()
+                .HasOne(os => os.Order)
+                .WithMany()
+                .HasForeignKey(os => os.OrderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Indexes for Settlement
+            modelBuilder.Entity<Settlement>()
+                .HasIndex(s => new { s.SellerId, s.Status });
+
+            modelBuilder.Entity<Settlement>()
+                .HasIndex(s => new { s.ShopId, s.Status });
+
+            modelBuilder.Entity<Settlement>()
+                .HasIndex(s => s.RequestedAt);
+
+            modelBuilder.Entity<OrderSettlement>()
+                .HasIndex(os => os.OrderId)
+                .IsUnique(); // Một Order chỉ có thể được settle một lần
+
+            modelBuilder.Entity<OrderSettlement>()
+                .HasIndex(os => os.SettlementId);
 
             // ---------- Global Query Filters (soft-delete) ----------
             modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);

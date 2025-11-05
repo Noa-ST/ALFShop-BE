@@ -273,6 +273,18 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // Ánh xạ CartItem chi tiết
                 var itemDto = _mapper.Map<GetCartItemDto>(item);
                 itemDto.ProductName = product?.Name ?? "Sản phẩm đã bị xóa";
+                
+                // ✅ Map ShopId từ Product (đảm bảo luôn có giá trị hợp lệ)
+                if (product != null && product.ShopId != Guid.Empty)
+                {
+                    itemDto.ShopId = product.ShopId;
+                }
+                else
+                {
+                    itemDto.ShopId = Guid.Empty; // Fallback nếu product null hoặc ShopId invalid
+                    // Log warning nếu cần (có thể thêm logger nếu cần thiết)
+                }
+                
                 itemDto.ShopName = product?.Shop?.Name ?? "N/A";
                 itemDto.UnitPrice = unitPrice;
                 itemDto.ItemTotal = itemTotal;

@@ -3,6 +3,7 @@
     public class GetCartItemDto
     {
         public Guid ProductId { get; set; }
+        public Guid ShopId { get; set; } // ✅ Added: ShopId để FE có thể group items theo shop
         public string ProductName { get; set; } = null!;
         public string ShopName { get; set; } = null!;
         public int Quantity { get; set; }
