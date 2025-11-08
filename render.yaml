@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: aifshop-backend
+    plan: free
+    runtime: dotnet
+    region: oregon
+    autoDeploy: true
+    buildCommand: dotnet restore && dotnet publish eCommerceApp.Host/eCommerceApp.Host.csproj -c Release -o out
+    startCommand: dotnet out/eCommerceApp.Host.dll
+    healthCheckPath: /swagger
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://0.0.0.0:${PORT}
+
+      # Database (Neon PostgreSQL)
+      - key: ConnectionStrings__Default
+        value: Host=ep-plain-feather-ah6vjz54-pooler.c-3.us-east-1.aws.neon.tech;Port=5432;Database=neondb;Username=neondb_owner;Password=npg_4hFUx0XSCscf;SSL Mode=Require;Trust Server Certificate=true
+
+      # JWT
+      - key: JWT__Key
+        sync: false
+      - key: JWT__Issuer
+        value: https://aifshop-backend.onrender.com
+      - key: JWT__Audience
+        value: https://aifshop-backend.onrender.com
+
+      # PayOS
+      - key: PayOS__ClientId
+        sync: false
+      - key: PayOS__ApiKey
+        sync: false
+      - key: PayOS__ChecksumKey
+        sync: false
+      - key: PayOS__OrganizationId
+        value: 1d9e790cb66f11f08d570242ac110002
+      - key: PayOS__BaseUrl
+        value: https://api-merchant.payos.vn
+      - key: PayOS__WebhookUrl
+        value: https://aifshop-backend.onrender.com/api/PaymentWebhook/webhook
+      - key: PayOS__FrontendUrl
+        value: https://your-frontend-domain.example
+
+      # Email (nếu dùng SMTP)
+      - key: Email__SmtpServer
+        value: smtp.gmail.com
+      - key: Email__SmtpPort
+        value: 587
+      - key: Email__SmtpUsername
+        sync: false
+      - key: Email__SmtpPassword
+        sync: false
+      - key: Email__FromEmail
+        sync: false
+      - key: Email__FromName
+        value: AIFShop

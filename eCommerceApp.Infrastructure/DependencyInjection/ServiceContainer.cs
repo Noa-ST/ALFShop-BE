@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Aplication.Services.Interfaces.Logging;
+using eCommerceApp.Aplication.Services.Interfaces.Logging;
 using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Interfaces;
@@ -29,16 +29,13 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
         public static IServiceCollection AddInfrastructureService(this IServiceCollection services, IConfiguration config)
         {
             services.AddDbContext<AppDbContext>(options =>
-                options.UseSqlServer(config.GetConnectionString("Default"), sqlOptions =>
+                options.UseNpgsql(config.GetConnectionString("Default"), npgsqlOptions =>
                 {
-                    sqlOptions.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
-                    // ✅ Fix: Enable retry với execution strategy
-                    // Sử dụng ExecuteInTransactionAsync() trong UnitOfWork để wrap transactions
-                    // đảm bảo tương thích với EnableRetryOnFailure()
-                    sqlOptions.EnableRetryOnFailure(
+                    npgsqlOptions.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
+                    npgsqlOptions.EnableRetryOnFailure(
                         maxRetryCount: 3,
                         maxRetryDelay: TimeSpan.FromSeconds(30),
-                        errorNumbersToAdd: null);
+                        errorCodesToAdd: null);
                 }),
                 ServiceLifetime.Scoped);
 
