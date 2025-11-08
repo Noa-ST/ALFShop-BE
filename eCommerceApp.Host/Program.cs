@@ -84,6 +84,16 @@ try
 {
     var app = builder.Build();
 
+    // Áp dụng migrations khi khởi động (PostgreSQL/EF Core)
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<eCommerceApp.Infrastructure.Data.AppDbContext>();
+        db.Database.Migrate();
+    }
+    
+    // Bật Swagger cả Production nếu muốn healthCheckPath = /swagger
+    app.UseSwagger();
+    app.UseSwaggerUI();
     app.UseCors();
     app.UseSerilogRequestLogging();
 
