@@ -21,9 +21,9 @@ services:
       - key: JWT__Key
         sync: false
       - key: JWT__Issuer
-        value: https://AIFShop-BE.onrender.com
+        value: https://aifshop-backend.onrender.com
       - key: JWT__Audience
-        value: https://AIFShop-BE.onrender.com
+        value: https://aifshop-backend.onrender.com
 
       # PayOS
       - key: PayOS__ClientId
@@ -37,7 +37,7 @@ services:
       - key: PayOS__BaseUrl
         value: https://api-merchant.payos.vn
       - key: PayOS__WebhookUrl
-        value: https://AIFShop-BE.onrender.com/api/PaymentWebhook/webhook
+        value: https://aifshop-backend.onrender.com/api/PaymentWebhook/webhook
       - key: PayOS__FrontendUrl
         value: https://your-frontend-domain.example
 

@@ -1,6 +1,7 @@
 ﻿using eCommerceApp.Aplication.DependencyInjection;
 using eCommerceApp.Infrastructure.DependencyInjection;
 using eCommerceApp.Infrastructure.Realtime;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text.Json.Serialization;
