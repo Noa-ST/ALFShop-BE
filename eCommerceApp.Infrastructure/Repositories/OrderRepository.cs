@@ -45,7 +45,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             => await _context.Orders
                 .Include(o => o.Customer)
                 .Include(o => o.Shop)
-                .Include(o => o.Items)! // ✅ Fix: Include Items
+                .Include(o => o.Items)
                     .ThenInclude(oi => oi.Product)
                 .ToListAsync();
 
@@ -53,7 +53,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             => await _context.Orders
                 .Include(o => o.Customer)
                 .Include(o => o.Shop)
-                .Include(o => o.Items)!
+                .Include(o => o.Items)
                     .ThenInclude(oi => oi.Product)
                 .FirstOrDefaultAsync(o => o.Id == id);
 
@@ -223,10 +223,12 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .GroupBy(o => o.ShopId)
                 .Select(g => new
                 {
-                    ShopId = g.Key,
-                    ShopName = g.First().Shop?.Name ?? "Unknown",
+                    ShopId   = g.Key,
+                    ShopName = g.Where(o => o.Shop != null)
+                                 .Select(o => o.Shop!.Name)
+                                 .FirstOrDefault() ?? "Unknown",
                     OrderCount = g.Count(),
-                    Revenue = g.Sum(o => o.TotalAmount)
+                    Revenue    = g.Sum(o => o.TotalAmount)
                 })
                 .OrderByDescending(x => x.OrderCount)
                 .Take(top)
@@ -246,10 +248,12 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .GroupBy(o => o.CustomerId)
                 .Select(g => new
                 {
-                    CustomerId = g.Key,
-                    CustomerName = g.First().Customer?.UserName ?? "Unknown",
-                    OrderCount = g.Count(),
-                    TotalSpent = g.Sum(o => o.TotalAmount)
+                    CustomerId   = g.Key,
+                    CustomerName = g.Where(o => o.Customer != null)
+                                     .Select(o => o.Customer!.UserName)
+                                     .FirstOrDefault() ?? "Unknown",
+                    OrderCount   = g.Count(),
+                    TotalSpent   = g.Sum(o => o.TotalAmount)
                 })
                 .OrderByDescending(x => x.TotalSpent)
                 .Take(top)
@@ -303,19 +307,18 @@ namespace eCommerceApp.Infrastructure.Repositories
         public async Task<IEnumerable<Order>> GetUnpaidOrdersOlderThanAsync(TimeSpan olderThan, PaymentMethod? excludePaymentMethod = null)
         {
             var cutoffTime = DateTime.UtcNow.Subtract(olderThan);
-            
             var query = _context.Orders
                 .Where(o => o.Status == OrderStatus.Pending
                     && o.PaymentStatus == PaymentStatus.Pending
                     && o.CreatedAt < cutoffTime);
-            
+        
             if (excludePaymentMethod.HasValue)
             {
                 query = query.Where(o => o.PaymentMethod != excludePaymentMethod.Value);
             }
-            
+        
             return await query
-                .Include(o => o.Items)! // ✅ thêm null-forgiving cho collection
+                .Include(o => o.Items)! // giữ null-forgiving cho collection
                     .ThenInclude(oi => oi.Product)
                 .ToListAsync();
         }

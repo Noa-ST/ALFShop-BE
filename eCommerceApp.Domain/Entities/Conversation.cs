@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Domain.Entities.Identity;
+using eCommerceApp.Domain.Entities.Identity;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -51,6 +51,6 @@ namespace eCommerceApp.Domain.Entities
         [ForeignKey(nameof(User2Id))]
         public User? User2 { get; set; }
 
-        public ICollection<Message>? Messages { get; set; }
+        public ICollection<Message> Messages { get; set; } = new List<Message>();
     }
 }

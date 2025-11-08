@@ -51,7 +51,6 @@ namespace eCommerceApp.Infrastructure.Repositories
 
         public async Task<List<Conversation>> GetUserConversationsAsync(string userId, int skip = 0, int take = 20)
         {
-            var isUser1 = true; // Will check both cases
             return await _context.Conversations
                 .Where(c => (c.User1Id == userId || c.User2Id == userId) && !c.IsDeleted) // ✅ Fix: Filter deleted conversations
                 .OrderByDescending(c => (c.User1Id == userId ? c.IsPinnedByUser1 : c.IsPinnedByUser2)) // ✅ New: Pin conversations first

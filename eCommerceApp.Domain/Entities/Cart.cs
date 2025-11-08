@@ -11,6 +11,6 @@ namespace eCommerceApp.Domain.Entities
         [ForeignKey(nameof(CustomerId))]
         public User? Customer { get; set; }
 
-        public ICollection<CartItem>? Items { get; set; }
+        public ICollection<CartItem> Items { get; set; } = new List<CartItem>();
     }
 }

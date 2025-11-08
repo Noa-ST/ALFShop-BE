@@ -12,7 +12,6 @@ using eCommerceApp.Infrastructure.Service;
 using eCommerceApp.Infrastructure.Realtime;
 using eCommerceApp.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using eCommerceApp.Aplication.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;

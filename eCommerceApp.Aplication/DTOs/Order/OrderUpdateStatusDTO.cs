@@ -1,7 +1,7 @@
-﻿namespace eCommerceApp.Aplication.DTOs.Order
+namespace eCommerceApp.Aplication.DTOs.Order
 {
     public class OrderUpdateStatusDTO
     {
-        public string Status { get; set; } // Pending, Shipping, Completed, Cancelled
+        public string Status { get; set; } = string.Empty; // Pending, Shipping, Completed, Cancelled
     }
 }

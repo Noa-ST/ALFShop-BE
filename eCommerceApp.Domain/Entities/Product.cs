@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Domain.Enums;
+using eCommerceApp.Domain.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -31,7 +31,7 @@ namespace eCommerceApp.Domain.Entities
         public Guid GlobalCategoryId { get; set; }
         public GlobalCategory GlobalCategory { get; set; } = null!;
 
-        public ICollection<ProductImage>? Images { get; set; }
+        public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
         public ICollection<OrderItem>? OrderItems { get; set; }
         public ICollection<CartItem>? CartItems { get; set; }
         public ICollection<Promotion>? Promotions { get; set; }

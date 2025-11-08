@@ -17,11 +17,11 @@ namespace eCommerceApp.Infrastructure.Repositories
         public async Task<Cart?> GetCartByUserIdAsync(string userId)
         {
             return await _context.Carts
-                .Include(c => c.Items)!
-                    .ThenInclude(ci => ci.Product)!
-                        .ThenInclude(p => p.Images!)
-                .Include(c => c.Items)!
-                    .ThenInclude(ci => ci.Product)!
+                .Include(c => c.Items)
+                    .ThenInclude(ci => ci.Product!)
+                        .ThenInclude(p => p.Images)
+                .Include(c => c.Items)
+                    .ThenInclude(ci => ci.Product!)
                         .ThenInclude(p => p.Shop)
                 .FirstOrDefaultAsync(c => c.CustomerId == userId && !c.IsDeleted);
         }

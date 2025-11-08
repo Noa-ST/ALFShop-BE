@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations.Schema;
 using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Enums;
 
@@ -38,7 +38,7 @@ namespace eCommerceApp.Domain.Entities
         [ForeignKey(nameof(ShopId))]
         public Shop? Shop { get; set; }
 
-        public ICollection<OrderItem>? Items { get; set; }
+        public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
         // Bỏ Navigation Payment vì dùng OneToOne Key
         // public Payment? Payment { get; set; }
     }
