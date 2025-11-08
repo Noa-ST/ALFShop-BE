@@ -40,6 +40,8 @@ services:
         value: https://aifshop-backend.onrender.com/api/PaymentWebhook/webhook
       - key: PayOS__FrontendUrl
         value: https://your-frontend-domain.example
+      - key: DataProtection__KeysPath
+        value: /data/protection-keys
 
       # Email (nếu dùng SMTP)
       - key: Email__SmtpServer

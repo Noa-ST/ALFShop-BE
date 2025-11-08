@@ -1,10 +1,13 @@
-﻿using eCommerceApp.Aplication.DependencyInjection;
+﻿// Top-level statements in Program.cs
+using eCommerceApp.Aplication.DependencyInjection;
 using eCommerceApp.Infrastructure.DependencyInjection;
 using eCommerceApp.Infrastructure.Realtime;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.DataProtection; // ✅ Thêm
+using System.IO; // ✅ Thêm
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -85,13 +88,13 @@ try
 {
     var app = builder.Build();
 
-    // Áp dụng migrations khi khởi động (PostgreSQL/EF Core)
-    using (var scope = app.Services.CreateScope())
-    {
-        var db = scope.ServiceProvider.GetRequiredService<eCommerceApp.Infrastructure.Data.AppDbContext>();
-        db.Database.Migrate();
-    }
-    
+    // ✅ Cấu hình Data Protection: lưu keys bền vững
+    var dpKeysPath = builder.Configuration["DataProtection__KeysPath"] ?? "/data/protection-keys";
+    Directory.CreateDirectory(dpKeysPath);
+    builder.Services.AddDataProtection()
+        .SetApplicationName("AIFShop-BE")
+        .PersistKeysToFileSystem(new DirectoryInfo(dpKeysPath));
+
     // Bật Swagger cả Production nếu muốn healthCheckPath = /swagger
     app.UseSwagger();
     app.UseSwaggerUI();

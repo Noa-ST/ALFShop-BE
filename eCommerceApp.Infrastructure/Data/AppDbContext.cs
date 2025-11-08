@@ -278,7 +278,7 @@ namespace eCommerceApp.Infrastructure.Data
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // ---------- Mối quan hệ Chat mới (Giai đoạn 8) ----------
+            // ---------- Mối quan hệt mới (Giai đoạn 8) ----------
             // Conversation
             modelBuilder.Entity<Conversation>()
                 .HasOne(c => c.User1)
@@ -369,7 +369,8 @@ namespace eCommerceApp.Infrastructure.Data
                 .HasOne(c => c.Customer)
                 .WithMany(u => u.Carts)
                 .HasForeignKey(c => c.CustomerId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired(false); // ✅ Tránh cảnh báo khi User có Global Query Filter (IsDeleted)
 
             // Order -> Address / Customer
             // ❌ SỬA LỖI CS0103: Sửa 'modelModelBuilder' thành 'modelBuilder'
