@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Product;
 using eCommerceApp.Aplication.Services.Interfaces;
@@ -117,7 +117,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 entity.IsDeleted = false;
 
                 // 🔧 Đảm bảo không bị nhân đôi ảnh (xoá bộ ảnh mà AutoMapper đã map sẵn)
-                entity.Images = null; // Không set Images trên entity để tránh tracking conflicts
+                entity.Images = new List<ProductImage>(); // Set danh sách rỗng để phù hợp với thuộc tính non-nullable
 
                 // ✅ Khai báo outputImages ngoài để sử dụng sau
                 List<ProductImage> outputImages = new List<ProductImage>();

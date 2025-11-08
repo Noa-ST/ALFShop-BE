@@ -83,17 +83,17 @@ builder.Services.AddCors(opt =>
     });
 });
 
+// ✅ Cấu hình Data Protection: phải thực hiện TRƯỚC khi Build để tránh ServiceCollection read-only
+var dpKeysPath = builder.Configuration["DataProtection__KeysPath"] ?? "/data/protection-keys";
+Directory.CreateDirectory(dpKeysPath);
+builder.Services.AddDataProtection()
+    .SetApplicationName("AIFShop-BE")
+    .PersistKeysToFileSystem(new DirectoryInfo(dpKeysPath));
+
 // ---- Build app ----
 try
 {
     var app = builder.Build();
-
-    // ✅ Cấu hình Data Protection: lưu keys bền vững
-    var dpKeysPath = builder.Configuration["DataProtection__KeysPath"] ?? "/data/protection-keys";
-    Directory.CreateDirectory(dpKeysPath);
-    builder.Services.AddDataProtection()
-        .SetApplicationName("AIFShop-BE")
-        .PersistKeysToFileSystem(new DirectoryInfo(dpKeysPath));
 
     // Bật Swagger cả Production nếu muốn healthCheckPath = /swagger
     app.UseSwagger();

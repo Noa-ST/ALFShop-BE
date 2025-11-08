@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 
 namespace eCommerceApp.Aplication.DTOs
 {
@@ -33,7 +33,7 @@ namespace eCommerceApp.Aplication.DTOs
         public static ServiceResponse<T> Success(T data, string message = "Thành công.") =>
             new ServiceResponse<T>(true, data, message, HttpStatusCode.OK);
 
-        public static ServiceResponse<T> Fail(string message = "Thất bại.", HttpStatusCode statusCode = HttpStatusCode.BadRequest) =>
+        public new static ServiceResponse<T> Fail(string message = "Thất bại.", HttpStatusCode statusCode = HttpStatusCode.BadRequest) =>
             new ServiceResponse<T>(false, default, message, statusCode);
 
         public static ServiceResponse<T> Fail(string message, T data, HttpStatusCode statusCode = HttpStatusCode.BadRequest) =>
