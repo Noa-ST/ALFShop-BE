@@ -224,7 +224,7 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .Select(g => new
                 {
                     ShopId = g.Key,
-                    ShopName = g.First().Shop != null ? g.First().Shop.Name : "Unknown",
+                    ShopName = g.First().Shop?.Name ?? "Unknown",
                     OrderCount = g.Count(),
                     Revenue = g.Sum(o => o.TotalAmount)
                 })
@@ -247,7 +247,7 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .Select(g => new
                 {
                     CustomerId = g.Key,
-                    CustomerName = g.First().Customer != null ? g.First().Customer.UserName : "Unknown",
+                    CustomerName = g.First().Customer?.UserName ?? "Unknown",
                     OrderCount = g.Count(),
                     TotalSpent = g.Sum(o => o.TotalAmount)
                 })
@@ -309,14 +309,13 @@ namespace eCommerceApp.Infrastructure.Repositories
                     && o.PaymentStatus == PaymentStatus.Pending
                     && o.CreatedAt < cutoffTime);
             
-            // Exclude COD orders nếu được chỉ định (COD có thể thanh toán sau)
             if (excludePaymentMethod.HasValue)
             {
                 query = query.Where(o => o.PaymentMethod != excludePaymentMethod.Value);
             }
             
             return await query
-                .Include(o => o.Items) // Include items để restore stock khi cancel
+                .Include(o => o.Items)! // ✅ thêm null-forgiving cho collection
                     .ThenInclude(oi => oi.Product)
                 .ToListAsync();
         }

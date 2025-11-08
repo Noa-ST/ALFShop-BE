@@ -20,30 +20,29 @@ namespace eCommerceApp.Infrastructure.Repositories
         public async Task<Message?> GetByIdAsync(Guid messageId)
         {
             return await _context.Messages
-                .Where(m => !m.IsDeleted) // ✅ Fix: Filter deleted messages
+                .Where(m => !m.IsDeleted)
                 .Include(m => m.Sender)
                 .Include(m => m.ReplyToMessage)
                 .Include(m => m.Order)
-                .Include(m => m.Product)
-                    .ThenInclude(p => p.Images)
-                .Include(m => m.Product)
+                .Include(m => m.Product!)
+                    .ThenInclude(p => p.Images!)
+                .Include(m => m.Product!)
                     .ThenInclude(p => p.Shop)
                 .FirstOrDefaultAsync(m => m.Id == messageId);
         }
 
         public async Task<List<Message>> GetMessagesAsync(Guid conversationId, int skip = 0, int take = 50)
         {
-            // ✅ Fix: Include phải đặt TRƯỚC OrderBy/Skip/Take
             return await _context.Messages
-                .Where(m => m.ConversationId == conversationId && !m.IsDeleted) // ✅ Fix: Filter deleted messages
+                .Where(m => m.ConversationId == conversationId && !m.IsDeleted)
                 .Include(m => m.Sender)
                 .Include(m => m.ReplyToMessage)
                 .Include(m => m.Order)
-                .Include(m => m.Product)
-                    .ThenInclude(p => p.Images)
-                .Include(m => m.Product)
+                .Include(m => m.Product!)
+                    .ThenInclude(p => p.Images!)
+                .Include(m => m.Product!)
                     .ThenInclude(p => p.Shop)
-                .OrderBy(m => m.CreatedAt) // ✅ Fix: OrderBy sau Include
+                .OrderBy(m => m.CreatedAt)
                 .Skip(skip)
                 .Take(take)
                 .AsNoTracking()
@@ -100,9 +99,9 @@ namespace eCommerceApp.Infrastructure.Repositories
             int take = 50)
         {
             var query = _context.Messages
-                .Where(m => m.ConversationId == conversationId 
+                .Where(m => m.ConversationId == conversationId
                     && !m.IsDeleted
-                    && (m.Content.Contains(keyword) || 
+                    && (m.Content.Contains(keyword) ||
                         (m.AttachmentUrl != null && m.AttachmentUrl.Contains(keyword))));
 
             var totalCount = await query.CountAsync();
@@ -111,9 +110,9 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .Include(m => m.Sender)
                 .Include(m => m.ReplyToMessage)
                 .Include(m => m.Order)
-                .Include(m => m.Product)
-                    .ThenInclude(p => p.Images)
-                .Include(m => m.Product)
+                .Include(m => m.Product!)
+                    .ThenInclude(p => p.Images!)
+                .Include(m => m.Product!)
                     .ThenInclude(p => p.Shop)
                 .OrderByDescending(m => m.CreatedAt)
                 .Skip(skip)

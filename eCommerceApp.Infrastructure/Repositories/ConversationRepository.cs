@@ -17,12 +17,11 @@ namespace eCommerceApp.Infrastructure.Repositories
         public async Task<Conversation?> GetByIdAsync(Guid conversationId, bool includeMessages = false)
         {
             IQueryable<Conversation> query = _context.Conversations
-                .Where(c => !c.IsDeleted) // ✅ Fix: Filter deleted conversations
+                .Where(c => !c.IsDeleted)
                 .AsQueryable();
 
             if (includeMessages)
             {
-                // ✅ Fix: Filter deleted messages trong Include (EF Core 5.0+)
                 query = query
                     .Include(c => c.Messages!.Where(m => !m.IsDeleted))
                         .ThenInclude(m => m.Sender)
@@ -31,10 +30,10 @@ namespace eCommerceApp.Infrastructure.Repositories
                     .Include(c => c.Messages!.Where(m => !m.IsDeleted))
                         .ThenInclude(m => m.Order)
                     .Include(c => c.Messages!.Where(m => !m.IsDeleted))
-                        .ThenInclude(m => m.Product)
-                            .ThenInclude(p => p.Images)
+                        .ThenInclude(m => m.Product!)
+                            .ThenInclude(p => p.Images!)
                     .Include(c => c.Messages!.Where(m => !m.IsDeleted))
-                        .ThenInclude(m => m.Product)
+                        .ThenInclude(m => m.Product!)
                             .ThenInclude(p => p.Shop);
             }
 
