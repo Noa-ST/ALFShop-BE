@@ -12,6 +12,7 @@ namespace eCommerceApp.Aplication.DTOs.Payment
         public string CancelUrl { get; set; } = string.Empty; // URL khi hủy
         public string ReturnUrl { get; set; } = string.Empty; // URL khi thành công
         public long? ExpiredAt { get; set; } // Thời gian hết hạn (Unix timestamp)
+        public string Signature { get; set; } = string.Empty; // Chữ ký HMAC để xác thực request
     }
 
     public class PayOSItem

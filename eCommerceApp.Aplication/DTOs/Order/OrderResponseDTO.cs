@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace eCommerceApp.Aplication.DTOs.Order
@@ -8,6 +8,7 @@ namespace eCommerceApp.Aplication.DTOs.Order
         public Guid OrderId { get; set; }
         public string Status { get; set; } = string.Empty;
         public string PaymentStatus { get; set; } = string.Empty;
+        public bool IsPaid { get; set; }
         public string PaymentMethod { get; set; } = string.Empty;
         public decimal TotalAmount { get; set; }
         public decimal ShippingFee { get; set; }

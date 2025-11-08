@@ -5,7 +5,7 @@ namespace eCommerceApp.Aplication.DTOs.Payment
     /// </summary>
     public class PayOSCreatePaymentResponse
     {
-        public int Code { get; set; }
+        public string Code { get; set; } = string.Empty; // ✅ PayOS trả về code dạng string ("00", "01", etc.)
         public string Desc { get; set; } = string.Empty;
         public PayOSData? Data { get; set; }
     }
@@ -22,7 +22,7 @@ namespace eCommerceApp.Aplication.DTOs.Payment
         public string PaymentLinkId { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public long? ExpiredAt { get; set; }
-        public long? CheckoutUrl { get; set; }
+        public string? CheckoutUrl { get; set; } // ✅ URL để redirect user đến trang thanh toán PayOS
         public string QrCode { get; set; } = string.Empty;
     }
 }

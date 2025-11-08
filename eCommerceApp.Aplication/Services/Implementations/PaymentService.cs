@@ -116,19 +116,24 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.BadRequest);
                 }
 
-                // ✅ New: Validate Order status - không thể thanh toán online cho order đã Delivered
-                // ✅ Fix: Với COD/Cash, cho phép thanh toán khi Delivered (vì COD thanh toán khi nhận hàng)
+                // ✅ Validate Order status for Delivered orders
+                // Logic: COD/Cash payments are allowed when order is Delivered (payment on delivery)
+                // Online payments (Wallet/Bank) are NOT allowed when order is Delivered
                 if (order.Status == OrderStatus.Delivered)
                 {
-                    // ✅ Cho phép COD/Cash khi Delivered (thanh toán khi nhận hàng)
-                    // ✅ Chặn online payment khi Delivered (đã qua giai đoạn thanh toán online)
-                    if (paymentMethod != PaymentMethod.COD && paymentMethod != PaymentMethod.Cash)
+                    // ✅ COD/Cash: Allowed when Delivered (customer pays after receiving order)
+                    if (paymentMethod == PaymentMethod.COD || paymentMethod == PaymentMethod.Cash)
+                    {
+                        // ✅ Continue processing COD/Cash payment for Delivered orders
+                        // This is the correct flow: Customer receives order → Confirms COD payment
+                    }
+                    // ❌ Online payments: NOT allowed when Delivered (payment should be done before delivery)
+                    else
                     {
                         return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                             "Không thể thanh toán online cho đơn hàng đã được giao.",
                             HttpStatusCode.BadRequest);
                     }
-                    // Nếu là COD/Cash, tiếp tục xử lý (không return error)
                 }
 
                 // 5. Xử lý theo phương thức thanh toán
@@ -189,7 +194,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     _logger.LogInformation($"COD payment processed successfully: OrderId={orderId}, PaymentId={payment.PaymentId}, Amount={payment.Amount}");
 
                     return ServiceResponse<PayOSCreatePaymentResponse>.Success(
-                            new PayOSCreatePaymentResponse { Code = 0, Desc = "Thanh toán COD thành công." },
+                            new PayOSCreatePaymentResponse { Code = "00", Desc = "Thanh toán COD thành công." },
                             "Thanh toán thành công.");
                 }
                 else
@@ -200,29 +205,58 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
                     var frontendUrl = _configuration["PayOS:FrontendUrl"] ?? "http://localhost:3000";
                     var expiredAt = DateTimeOffset.UtcNow.AddMinutes(15);
+                    // ✅ Tính Items từ order items thực tế (nếu có), nếu không thì fallback về tổng đơn hàng
+                    var payOSItems = new List<PayOSItem>();
+                    if (order.Items != null && order.Items.Any())
+                    {
+                        // ✅ Sử dụng order items thực tế - Thử VND trực tiếp (không nhân 100)
+                        payOSItems = order.Items.Select(oi => new PayOSItem
+                        {
+                            Name = $"Product {oi.ProductId}", // ✅ Thử tên đơn giản không có Unicode
+                            Quantity = oi.Quantity,
+                            Price = (int)Math.Round(oi.PriceAtPurchase ?? 0) // ✅ Thử VND trực tiếp (không nhân 100)
+                        }).ToList();
+                    }
+                    else
+                    {
+                        // ✅ Fallback: Nếu không có items, tạo một item tổng hợp
+                        payOSItems.Add(new PayOSItem
+                        {
+                            Name = $"Order {orderCode}", // ✅ Thử tên đơn giản không có Unicode
+                            Quantity = 1,
+                            Price = (int)Math.Round(order.TotalAmount) // ✅ Thử VND trực tiếp (không nhân 100)
+                        });
+                    }
+
                     var payOSRequest = new PayOSCreatePaymentRequest
                     {
                         OrderCode = orderCode,
-                        Amount = (int)(order.TotalAmount * 100), // Convert to VND (cents)
-                        Description = $"Thanh toán đơn hàng #{orderId}",
-                        Items = new List<PayOSItem>
-                        {
-                            new PayOSItem
-                            {
-                                Name = $"Đơn hàng {orderId}",
-                                Quantity = 1,
-                                Price = (int)(order.TotalAmount * 100)
-                            }
-                        },
+                        Amount = (int)Math.Round(order.TotalAmount), // ✅ Thử VND trực tiếp (không nhân 100) - PayOS API v2 có thể yêu cầu VND
+                        Description = $"Don hang #{orderCode}", // Tối đa 25 ký tự
+                        Items = payOSItems,
                         CancelUrl = $"{frontendUrl}/payment/cancel?orderId={orderId}",
                         ReturnUrl = $"{frontendUrl}/payment/return?orderId={orderId}",
                         ExpiredAt = expiredAt.ToUnixTimeSeconds()
                     };
 
+                    var signature = _payOSService.CreatePaymentSignature(payOSRequest);
+                    if (string.IsNullOrEmpty(signature))
+                    {
+                        _logger.LogWarning($"PayOS signature is empty. OrderCode={orderCode}. Please verify PayOS ChecksumKey configuration.");
+                        return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
+                            "Không thể tạo chữ ký thanh toán PayOS. Vui lòng kiểm tra cấu hình hệ thống.",
+                            HttpStatusCode.InternalServerError);
+                    }
+
+                    payOSRequest.Signature = signature;
+                    
+                    // ✅ Log để debug
+                    _logger.LogInformation($"PayOS request prepared: OrderCode={orderCode}, Amount={payOSRequest.Amount} (VND - no multiplier), OrderTotalAmount={order.TotalAmount} (VND), ItemsCount={payOSItems.Count}");
+
                     var payOSResponse = await _payOSService.CreatePaymentLinkAsync(payOSRequest);
 
                     // ✅ Fix: Validate PayOS response đầy đủ
-                    if (payOSResponse.Code != 0)
+                    if (payOSResponse.Code != "00")
                     {
                         return ServiceResponse<PayOSCreatePaymentResponse>.Fail(
                             $"Lỗi khi tạo payment link từ PayOS: {payOSResponse.Desc} (Code: {payOSResponse.Code})",
@@ -243,7 +277,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                             HttpStatusCode.BadRequest);
                     }
 
-                    // ✅ Note: CheckoutUrl trong PayOSData là long? (có thể là Unix timestamp hoặc ID)
+                    // ✅ Note: CheckoutUrl trong PayOSData là string? (URL để redirect user đến trang thanh toán PayOS)
                     // PayOS có thể trả về CheckoutUrl trong Data hoặc không, nên không bắt buộc validate ở đây
                     // Chỉ cần validate PaymentLinkId là đủ để tạo payment record
 
@@ -440,8 +474,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         HttpStatusCode.NotFound);
                 }
 
-                // ✅ Fix: Validate amount từ webhook - phải khớp với payment amount
-                var webhookAmountInVND = webhook.Data.Amount / 100.0m; // Convert từ cents về VND
+                // ✅ Fix: Validate amount từ webhook - PayOS gửi amount theo đơn vị VND
+                var webhookAmountInVND = (decimal)webhook.Data.Amount; // KHÔNG nhân/chia 100
                 if (Math.Abs(webhookAmountInVND - payment.Amount) > 0.01m) // Cho phép sai số 0.01 VND do rounding
                 {
                     return ServiceResponse<bool>.Fail(

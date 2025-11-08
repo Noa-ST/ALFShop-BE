@@ -502,30 +502,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // ✅ Fix: Save changes to database
                 await _unitOfWork.SaveChangesAsync();
 
-                // ✅ New: Auto-update payment status to Paid when order is Delivered and is COD/Cash
-                if (parsedNewStatus == OrderStatus.Delivered && 
-                    currentStatus != OrderStatus.Delivered && 
-                    order.PaymentStatus == PaymentStatus.Pending &&
-                    (order.PaymentMethod == PaymentMethod.COD || order.PaymentMethod == PaymentMethod.Cash))
-                {
-                    try
-                    {
-                        order.PaymentStatus = PaymentStatus.Paid;
-                        order.UpdatedAt = DateTime.UtcNow;
-                        
-                        await _unitOfWork.SaveChangesAsync();
-                        
-                        _logger.LogInformation(
-                            $"Auto-updated payment status to Paid for COD/Cash order: OrderId={id}, PaymentMethod={order.PaymentMethod}");
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log error nhưng không fail status update
-                        _logger.LogWarning(
-                            ex, 
-                            $"Failed to auto-update payment status for COD/Cash order: OrderId={id}, Error={ex.Message}");
-                    }
-                }
+                // ✅ Removed: Auto-update payment status when order is Delivered
+                // Payment status should only be updated when customer confirms COD payment via PaymentService.ProcessPaymentAsync
+                // This allows customer to confirm payment after receiving the order
 
                 // ✅ New: Auto-calculate settlement khi order được Delivered
                 if (parsedNewStatus == OrderStatus.Delivered && currentStatus != OrderStatus.Delivered && _settlementService != null)
@@ -925,27 +904,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 await _orderRepo.UpdateStatusAsync(id, OrderStatus.Delivered.ToString());
                 await _unitOfWork.SaveChangesAsync();
 
-                // 5. ✅ Auto-update payment status to Paid when order is Delivered and is COD/Cash
-                if (order.PaymentStatus == PaymentStatus.Pending &&
-                    (order.PaymentMethod == PaymentMethod.COD || order.PaymentMethod == PaymentMethod.Cash))
-                {
-                    try
-                    {
-                        order.PaymentStatus = PaymentStatus.Paid;
-                        order.UpdatedAt = DateTime.UtcNow;
-                        await _unitOfWork.SaveChangesAsync();
-                        
-                        _logger.LogInformation(
-                            $"Auto-updated payment status to Paid for COD/Cash order after customer confirm delivery: OrderId={id}, PaymentMethod={order.PaymentMethod}");
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log error nhưng không fail delivery confirmation
-                        _logger.LogWarning(
-                            ex, 
-                            $"Failed to auto-update payment status for COD/Cash order after customer confirm delivery: OrderId={id}, Error={ex.Message}");
-                    }
-                }
+                // ✅ Removed: Auto-update payment status when customer confirms delivery
+                // Payment status should only be updated when customer explicitly confirms COD payment via PaymentService.ProcessPaymentAsync
+                // This allows customer to confirm payment after receiving the order
 
                 // 6. ✅ Auto-calculate settlement khi order được Delivered
                 if (_settlementService != null)
