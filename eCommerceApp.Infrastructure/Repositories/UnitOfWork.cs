@@ -28,6 +28,7 @@ namespace eCommerceApp.Infrastructure.Repositories
         private IShopCategoryRepository? _shopCategories;
         private IProductImageRepository? _productImages;
         private ISellerBalanceRepository? _sellerBalances; // ✅ New
+        private IReviewRepository? _reviews; // ✅ New
 
         public UnitOfWork(AppDbContext context)
         {
@@ -73,6 +74,9 @@ namespace eCommerceApp.Infrastructure.Repositories
 
         public ISellerBalanceRepository SellerBalances =>
             _sellerBalances ??= new SellerBalanceRepository(_context); // ✅ New
+
+        public IReviewRepository Reviews =>
+            _reviews ??= new ReviewRepository(_context); // ✅ New
 
         // Transaction management
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

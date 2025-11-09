@@ -191,4 +191,8 @@ namespace eCommerceApp.Aplication.Mapping
                 .ForMember(dest => dest.Messages, opt => opt.Ignore());
         }
     }
+
+    // --- REVIEW ---
+    CreateMap<Review, eCommerceApp.Aplication.DTOs.Review.GetReview>()
+        .ForMember(dest => dest.UserFullName, opt => opt.MapFrom(src => src.User != null ? src.User.FullName : null));
 }

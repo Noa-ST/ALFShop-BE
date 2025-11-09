@@ -39,6 +39,9 @@ namespace eCommerceApp.Aplication.Mapping
 
             CreateMap<OrderSettlement, OrderSettlementDto>()
                 .ReverseMap();
+
+            // ✅ New: Review mapping tối thiểu (chủ yếu dùng MappingConfig)
+            CreateMap<Review, eCommerceApp.Aplication.DTOs.Review.GetReview>();
         }
     }
 }
