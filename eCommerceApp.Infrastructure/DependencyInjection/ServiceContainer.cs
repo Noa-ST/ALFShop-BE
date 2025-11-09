@@ -79,6 +79,19 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
                         Encoding.UTF8.GetBytes(config["JWT:Key"]!)
                     )
                 };
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/chat"))
+                        {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
+                    }
+                };
             });
 
             services.AddScoped<IUserManagement, UserManagement>();
@@ -97,6 +110,7 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IConversationRepository, ConversationRepository>();
             services.AddScoped<IMessageRepository, MessageRepository>();
             services.AddScoped<ISellerBalanceRepository, SellerBalanceRepository>(); // ✅ New
+            services.AddScoped<IReviewRepository, ReviewRepository>(); // ✅ New
             services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
             services.AddScoped<IEmailService, EmailService>();
 

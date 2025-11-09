@@ -73,13 +73,18 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 // ---- CORS ----
-builder.Services.AddCors(opt =>
+builder.Services.AddCors(options =>
 {
-    opt.AddDefaultPolicy(policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
         policy.AllowAnyHeader()
               .AllowAnyMethod()
-              .WithOrigins("http://localhost:5173", "https://localhost:5173")
+              .WithOrigins(
+                  "http://localhost:5173",
+                  "https://localhost:5173",
+                  "http://localhost:3000",
+                  "https://localhost:3000"
+              )
               .AllowCredentials();
     });
 });
