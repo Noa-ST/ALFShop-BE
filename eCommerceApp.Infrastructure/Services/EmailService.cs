@@ -126,51 +126,7 @@ namespace eCommerceApp.Infrastructure.Services
             return await SendEmailAsync(to, subject, body);
         }
 
-        public async Task<bool> SendEmailConfirmationEmailAsync(string to, string confirmationToken, string userName)
-        {
-            var confirmationLink = $"{_frontendUrl}/confirm-email?email={Uri.EscapeDataString(to)}&token={Uri.EscapeDataString(confirmationToken)}";
-            
-            var subject = "Confirm Your Email - AIFShop";
-            var body = $@"
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset='utf-8'>
-    <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background-color: #4CAF50; color: white; padding: 20px; text-align: center; }}
-        .content {{ padding: 20px; background-color: #f9f9f9; }}
-        .button {{ display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
-        .footer {{ text-align: center; padding: 20px; font-size: 12px; color: #666; }}
-    </style>
-</head>
-<body>
-    <div class='container'>
-        <div class='header'>
-            <h1>AIFShop</h1>
-        </div>
-        <div class='content'>
-            <h2>Email Confirmation</h2>
-            <p>Hello {userName},</p>
-            <p>Thank you for registering with AIFShop! Please confirm your email address by clicking the button below:</p>
-            <p style='text-align: center;'>
-                <a href='{confirmationLink}' class='button'>Confirm Email</a>
-            </p>
-            <p>Or copy and paste this link into your browser:</p>
-            <p style='word-break: break-all; color: #666;'>{confirmationLink}</p>
-            <p><strong>This link will expire in 24 hours.</strong></p>
-            <p>If you didn't create an account, please ignore this email.</p>
-        </div>
-        <div class='footer'>
-            <p>&copy; 2025 AIFShop. All rights reserved.</p>
-        </div>
-    </div>
-</body>
-</html>";
-
-            return await SendEmailAsync(to, subject, body);
-        }
+        // Confirmation email removed
     }
 }
 

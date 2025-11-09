@@ -43,6 +43,8 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
 
             var mappedModel = mapper.Map<User>(user);
             mappedModel.UserName = user.Email;
+            // Bỏ xác nhận email: đánh dấu xác nhận ngay khi tạo
+            mappedModel.EmailConfirmed = true;
 
             var result = await userManager.CreateAsync(mappedModel, user.Password);
             if (!result.Succeeded)
@@ -68,16 +70,8 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                 return new ServiceResponse { Message = "Error occurred while assigning role" };
             }
 
-            // Send email confirmation
-            var emailConfirmationToken = await userManager.GenerateEmailConfirmationTokenAsync(mappedModel);
-            _ = emailService.SendEmailConfirmationEmailAsync(
-                mappedModel.Email!,
-                emailConfirmationToken,
-                mappedModel.FullName ?? mappedModel.Email!
-            );
-
-            logger.LogInformation($"User created successfully with email: {user.Email}, role: {roleToAssign}");
-            return new ServiceResponse { Succeeded = true, Message = "Account created! Please check your email to confirm your account." };
+            logger.LogInformation($"User created successfully with email: {user.Email}, role: {roleToAssign}. Email confirmation skipped.");
+            return new ServiceResponse { Succeeded = true, Message = "Account created successfully." };
         }
 
         // Đăng nhập
@@ -109,19 +103,6 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
                     UserId: "",
                     Fullname: "");
 
-            // Kiểm tra email đã được xác nhận chưa
-            if (!_user.EmailConfirmed)
-            {
-                logger.LogWarning($"Login attempt failed - email not confirmed for: {user.Email}");
-                return new LoginResponse(
-                    Success: false,
-                    Message: "Please confirm your email before logging in. Check your email for confirmation link.",
-                    Token: null!,
-                    RefreshToken: null!,
-                    Role: "",
-                    UserId: "",
-                    Fullname: "");
-            }
 
             var validPassword = await userManager.CheckPasswordAsync(_user, user.Password);
             if (!validPassword)
@@ -352,55 +333,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
             return new ServiceResponse { Succeeded = true, Message = "Password reset successfully" };
         }
 
-        // Send email confirmation
-        public async Task<ServiceResponse> SendEmailConfirmation(string email)
-        {
-            var user = await userManager.FindByEmailAsync(email);
-            if (user == null)
-            {
-                return new ServiceResponse { Message = "User not found" };
-            }
-
-            if (user.EmailConfirmed)
-            {
-                return new ServiceResponse { Message = "Email is already confirmed" };
-            }
-
-            var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
-            var emailSent = await emailService.SendEmailConfirmationEmailAsync(
-                user.Email!,
-                token,
-                user.FullName ?? user.Email!
-            );
-
-            if (!emailSent)
-            {
-                return new ServiceResponse { Message = "Failed to send confirmation email. Please try again later." };
-            }
-
-            return new ServiceResponse { Succeeded = true, Message = "Confirmation email sent" };
-        }
-
-        // Confirm email
-        public async Task<ServiceResponse> ConfirmEmail(string email, string token)
-        {
-            var user = await userManager.FindByEmailAsync(email);
-            if (user == null)
-            {
-                return new ServiceResponse { Message = "User not found" };
-            }
-
-            var result = await userManager.ConfirmEmailAsync(user, token);
-            if (!result.Succeeded)
-            {
-                return new ServiceResponse
-                {
-                    Message = string.Join(";", result.Errors.Select(e => e.Description))
-                };
-            }
-
-            return new ServiceResponse { Succeeded = true, Message = "Email confirmed successfully" };
-        }
+        // (Email confirmation flow removed)
 
         // Update profile
         public async Task<ServiceResponse> UpdateProfile(string userId, UpdateProfileRequest request)

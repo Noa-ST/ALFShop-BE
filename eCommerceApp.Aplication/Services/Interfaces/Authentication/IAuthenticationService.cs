@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Aplication.DTOs;
+using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.DTOs.Identity;
 
 namespace eCommerceApp.Aplication.Services.Interfaces.Authentication
@@ -13,8 +13,6 @@ namespace eCommerceApp.Aplication.Services.Interfaces.Authentication
         Task<ServiceResponse> ChangePassword(string userId, ChangePasswordRequest request);
         Task<ServiceResponse> ForgotPassword(string email);
         Task<ServiceResponse> ResetPassword(ResetPasswordRequest request);
-        Task<ServiceResponse> SendEmailConfirmation(string email);
-        Task<ServiceResponse> ConfirmEmail(string email, string token);
         Task<ServiceResponse> UpdateProfile(string userId, UpdateProfileRequest request);
     }
 }

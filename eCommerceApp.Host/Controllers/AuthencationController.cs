@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Aplication.DTOs.Identity;
+using eCommerceApp.Aplication.DTOs.Identity;
 using eCommerceApp.Aplication.Services.Interfaces.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -91,21 +91,6 @@ namespace eCommerceApp.Host.Controllers
             return result.Succeeded ? Ok(result) : BadRequest(result);
         }
 
-        // ✅ MỚI: Gửi email xác nhận
-        [HttpPost("send-email-confirmation")]
-        public async Task<IActionResult> SendEmailConfirmation([FromBody] SendEmailConfirmationRequest request)
-        {
-            var result = await authenticationService.SendEmailConfirmation(request.Email);
-            return result.Succeeded ? Ok(result) : BadRequest(result);
-        }
-
-        // ✅ MỚI: Xác nhận email
-        [HttpPost("confirm-email")]
-        public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailRequest request)
-        {
-            var result = await authenticationService.ConfirmEmail(request.Email, request.Token);
-            return result.Succeeded ? Ok(result) : BadRequest(result);
-        }
 
         // ✅ MỚI: Cập nhật profile
         [HttpPut("profile")]
