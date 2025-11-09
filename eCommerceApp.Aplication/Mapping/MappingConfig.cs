@@ -1,4 +1,5 @@
-﻿using AutoMapper;
+﻿// Class: MappingConfig (AutoMapper Profile)
+using AutoMapper;
 using eCommerceApp.Aplication.DTOs.Identity;
 using eCommerceApp.Aplication.DTOs.Product;
 using eCommerceApp.Aplication.DTOs.Shop;
@@ -189,10 +190,8 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<Conversation, ConversationDetailDto>()
                 .ForMember(dest => dest.ConversationId, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.Messages, opt => opt.Ignore());
-        }
-    }
 
-    // --- REVIEW ---
-    CreateMap<Review, eCommerceApp.Aplication.DTOs.Review.GetReview>()
-        .ForMember(dest => dest.UserFullName, opt => opt.MapFrom(src => src.User != null ? src.User.FullName : null));
+            // --- REVIEW --- (đưa vào đúng trong constructor)
+            CreateMap<Review, GetReview>()
+                .ForMember(dest => dest.UserFullName, opt => opt.MapFrom(src => src.User != null ? src.User.FullName : null));
 }
