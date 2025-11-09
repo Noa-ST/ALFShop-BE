@@ -70,7 +70,7 @@ namespace eCommerceApp.Aplication.Services.Implementations.Authentication
 
             // Send email confirmation
             var emailConfirmationToken = await userManager.GenerateEmailConfirmationTokenAsync(mappedModel);
-            await emailService.SendEmailConfirmationEmailAsync(
+            _ = emailService.SendEmailConfirmationEmailAsync(
                 mappedModel.Email!,
                 emailConfirmationToken,
                 mappedModel.FullName ?? mappedModel.Email!

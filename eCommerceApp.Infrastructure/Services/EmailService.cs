@@ -18,6 +18,7 @@ namespace eCommerceApp.Infrastructure.Services
         private readonly string _fromEmail;
         private readonly string _fromName;
         private readonly string _frontendUrl;
+        private readonly bool _emailEnabled;
 
         public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
         {
@@ -30,12 +31,19 @@ namespace eCommerceApp.Infrastructure.Services
             _fromEmail = _configuration["Email:FromEmail"] ?? "";
             _fromName = _configuration["Email:FromName"] ?? "AIFShop";
             _frontendUrl = _configuration["PayOS:FrontendUrl"] ?? "http://localhost:5713";
+            _emailEnabled = bool.TryParse(_configuration["Email:Enabled"], out var enabled) ? enabled : true;
         }
 
         public async Task<bool> SendEmailAsync(string to, string subject, string body, bool isHtml = true)
         {
             try
             {
+                if (!_emailEnabled)
+                {
+                    _logger.LogInformation("Email sending disabled via configuration. Skipping send to {Email}", to);
+                    return true;
+                }
+
                 var message = new MimeMessage();
                 message.From.Add(new MailboxAddress(_fromName, _fromEmail));
                 message.To.Add(new MailboxAddress("", to));
@@ -53,7 +61,11 @@ namespace eCommerceApp.Infrastructure.Services
                 message.Body = bodyBuilder.ToMessageBody();
 
                 using var client = new SmtpClient();
-                await client.ConnectAsync(_smtpServer, _smtpPort, SecureSocketOptions.StartTls);
+                var timeoutMs = int.TryParse(_configuration["Email:TimeoutMs"], out var t) ? t : 10000;
+                client.Timeout = timeoutMs;
+
+                // Dùng Auto để MailKit chọn StartTLS/Ssl phù hợp theo port
+                await client.ConnectAsync(_smtpServer, _smtpPort, SecureSocketOptions.Auto);
                 await client.AuthenticateAsync(_smtpUsername, _smtpPassword);
                 await client.SendAsync(message);
                 await client.DisconnectAsync(true);
