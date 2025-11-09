@@ -5,9 +5,6 @@ using eCommerceApp.Domain.Repositories;
 
 namespace eCommerceApp.Domain.Interfaces
 {
-    /// <summary>
-    /// Unit of Work pattern interface để quản lý transactions và repositories
-    /// </summary>
     public interface IUnitOfWork : IDisposable
     {
         // Repositories (from Domain.Repositories)
@@ -27,6 +24,9 @@ namespace eCommerceApp.Domain.Interfaces
         IProductImageRepository ProductImages { get; }
         ISellerBalanceRepository SellerBalances { get; } // ✅ New
 
+        // ✅ Thêm: Review repository để dùng trong ReviewService
+        IReviewRepository Reviews { get; }
+        
         // Transaction management
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
         Task BeginTransactionAsync(CancellationToken cancellationToken = default);

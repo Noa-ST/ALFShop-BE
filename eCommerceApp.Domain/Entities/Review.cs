@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Domain.Entities.Identity;
+using eCommerceApp.Domain.Entities.Identity;
 using eCommerceApp.Domain.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -12,6 +12,7 @@ namespace eCommerceApp.Domain.Entities
 
         public int Rating { get; set; }
         public string? Comment { get; set; }
+        public string? RejectionReason { get; set; }
         public ReviewStatus Status { get; set; } = ReviewStatus.Pending;
         [ForeignKey(nameof(ProductId))]
         public Product? Product { get; set; }

@@ -56,11 +56,12 @@ namespace eCommerceApp.Infrastructure.Repositories
             return await _context.SaveChangesAsync();
         }
 
-        public async Task<int> RejectAsync(Guid id, string adminId)
+        public async Task<int> RejectAsync(Guid id, string adminId, string reason)
         {
             var review = await _context.Reviews.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
             if (review == null) return 0;
             review.Status = ReviewStatus.Rejected;
+            review.RejectionReason = reason;
             review.UpdatedAt = DateTime.UtcNow;
             _context.Reviews.Update(review);
             return await _context.SaveChangesAsync();

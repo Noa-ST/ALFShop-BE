@@ -5,6 +5,8 @@ using eCommerceApp.Aplication.Services.Interfaces;
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Interfaces;
+using System.Net;
+using System.Linq; // ✅ cần cho ToList()
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -26,15 +28,25 @@ namespace eCommerceApp.Aplication.Services.Implementations
         public async Task<ServiceResponse> CreateAsync(CreateReview dto, string userId)
         {
             if (dto.Rating < 1 || dto.Rating > 5)
-                return ServiceResponse.Error("Rating phải từ 1 đến 5.", System.Net.HttpStatusCode.BadRequest);
+                return ServiceResponse.Fail("Rating phải từ 1 đến 5.", HttpStatusCode.BadRequest);
 
             var existing = await _uow.Reviews.GetUserReviewForProductAsync(dto.ProductId, userId);
             if (existing != null)
-                return ServiceResponse.Error("Bạn đã đánh giá sản phẩm này rồi.", System.Net.HttpStatusCode.BadRequest);
+                return ServiceResponse.Fail("Bạn đã đánh giá sản phẩm này rồi.", HttpStatusCode.BadRequest);
 
             var product = await _uow.Products.GetByIdAsync(dto.ProductId);
             if (product == null)
-                return ServiceResponse.Error("Sản phẩm không tồn tại.", System.Net.HttpStatusCode.NotFound);
+                return ServiceResponse.Fail("Sản phẩm không tồn tại.", HttpStatusCode.NotFound);
+
+            // ✅ Verified purchase: chỉ cho phép review nếu đã mua và đơn hàng đã Delivered & Paid
+            var userOrders = await _uow.Orders.GetOrdersByCustomerIdAsync(userId);
+            var isVerifiedPurchase = userOrders.Any(o =>
+                o.Status == OrderStatus.Delivered &&
+                o.PaymentStatus == PaymentStatus.Paid &&
+                o.Items.Any(i => i.ProductId == dto.ProductId));
+
+            if (!isVerifiedPurchase)
+                return ServiceResponse.Fail("Chỉ khách đã mua và nhận hàng mới được đánh giá.", HttpStatusCode.Forbidden);
 
             var review = new Review
             {
@@ -58,13 +70,13 @@ namespace eCommerceApp.Aplication.Services.Implementations
         {
             var review = await _uow.Reviews.GetByIdAsync(id);
             if (review == null)
-                return ServiceResponse.Error("Review không tồn tại.", System.Net.HttpStatusCode.NotFound);
+                return ServiceResponse.Fail("Review không tồn tại.", HttpStatusCode.NotFound);
 
             if (review.UserId != userId)
-                return ServiceResponse.Error("Bạn không có quyền sửa review này.", System.Net.HttpStatusCode.Forbidden);
+                return ServiceResponse.Fail("Bạn không có quyền sửa review này.", HttpStatusCode.Forbidden);
 
             if (dto.Rating < 1 || dto.Rating > 5)
-                return ServiceResponse.Error("Rating phải từ 1 đến 5.", System.Net.HttpStatusCode.BadRequest);
+                return ServiceResponse.Fail("Rating phải từ 1 đến 5.", HttpStatusCode.BadRequest);
 
             review.Rating = dto.Rating;
             review.Comment = dto.Comment;
@@ -81,7 +93,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
         {
             var affected = await _uow.Reviews.SoftDeleteAsync(id, userId);
             if (affected == 0)
-                return ServiceResponse.Error("Không thể xóa review.", System.Net.HttpStatusCode.NotFound);
+                return ServiceResponse.Fail("Không thể xóa review.", HttpStatusCode.NotFound);
 
             return ServiceResponse.Success("Đã xóa review.");
         }
@@ -97,7 +109,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
             return new PagedResult<GetReview>
             {
-                Items = dtos.ToList(),
+                Data = dtos.ToList(), // ✅ đổi từ Items -> Data
                 TotalCount = total,
                 Page = page,
                 PageSize = pageSize
@@ -108,11 +120,11 @@ namespace eCommerceApp.Aplication.Services.Implementations
         {
             var review = await _uow.Reviews.GetByIdAsync(id);
             if (review == null)
-                return ServiceResponse.Error("Review không tồn tại.", System.Net.HttpStatusCode.NotFound);
+                return ServiceResponse.Fail("Review không tồn tại.", HttpStatusCode.NotFound);
 
             var changed = await _uow.Reviews.ApproveAsync(id, adminId);
             if (changed == 0)
-                return ServiceResponse.Error("Duyệt review thất bại.", System.Net.HttpStatusCode.BadRequest);
+                return ServiceResponse.Fail("Duyệt review thất bại.", HttpStatusCode.BadRequest);
 
             // Recalculate product & shop ratings
             await _productService.RecalculateRatingAsync(review.ProductId);
@@ -125,13 +137,13 @@ namespace eCommerceApp.Aplication.Services.Implementations
             return ServiceResponse.Success("Đã duyệt review.");
         }
 
-        public async Task<ServiceResponse> RejectAsync(Guid id, string adminId)
+        public async Task<ServiceResponse> RejectAsync(Guid id, string adminId, string reason)
         {
-            var changed = await _uow.Reviews.RejectAsync(id, adminId);
+            var changed = await _uow.Reviews.RejectAsync(id, adminId, reason);
             if (changed == 0)
-                return ServiceResponse.Error("Từ chối review thất bại.", System.Net.HttpStatusCode.BadRequest);
+                return ServiceResponse.Fail("Từ chối review thất bại.", HttpStatusCode.BadRequest);
 
-            return ServiceResponse.Success("Đã từ chối review.");
+            return ServiceResponse.Success("Đã từ chối review với lý do.");
         }
     }
 }

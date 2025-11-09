@@ -12,6 +12,8 @@ using System.Collections.Generic;
 using eCommerceApp.Aplication.DTOs.Address;
 using eCommerceApp.Aplication.DTOs.Cart; // Cần thiết cho List/IEnumerable
 using eCommerceApp.Aplication.DTOs.Chat;
+using eCommerceApp.Aplication.DTOs.Review; // ✅ Thêm để dùng GetReview
+using System.Linq; // ✅ Thêm để dùng .Where(...)
 
 namespace eCommerceApp.Aplication.Mapping
 {
@@ -119,7 +121,7 @@ namespace eCommerceApp.Aplication.Mapping
 
                 // Ánh xạ ProductImages
                 .ForMember(dest => dest.ProductImages, opt => opt.MapFrom(src =>
-                    src.Images != null 
+                    src.Images != null
                         ? src.Images.Where(i => !i.IsDeleted)
                         : new List<ProductImage>()));
 
@@ -174,11 +176,11 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<Message, MessageDto>()
                 .ForMember(dest => dest.MessageId, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.SenderName, opt => opt.MapFrom(src => src.Sender != null ? src.Sender.FullName : null))
-                .ForMember(dest => dest.SenderAvatarUrl, opt => opt.Ignore()) // User entity doesn't have AvatarUrl property yet
+                .ForMember(dest => dest.SenderAvatarUrl, opt => opt.Ignore())
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => src.UpdatedAt))
                 .ForMember(dest => dest.ReplyToMessage, opt => opt.Ignore())
                 .ForMember(dest => dest.OrderAttachment, opt => opt.Ignore())
-                .ForMember(dest => dest.ProductAttachment, opt => opt.Ignore()); // xử lý thủ công để tránh vòng tròn
+                .ForMember(dest => dest.ProductAttachment, opt => opt.Ignore());
 
             CreateMap<Conversation, ConversationSummaryDto>()
                 .ForMember(dest => dest.ConversationId, opt => opt.MapFrom(src => src.Id))
@@ -194,4 +196,6 @@ namespace eCommerceApp.Aplication.Mapping
             // --- REVIEW --- (đưa vào đúng trong constructor)
             CreateMap<Review, GetReview>()
                 .ForMember(dest => dest.UserFullName, opt => opt.MapFrom(src => src.User != null ? src.User.FullName : null));
+        }
+    }
 }

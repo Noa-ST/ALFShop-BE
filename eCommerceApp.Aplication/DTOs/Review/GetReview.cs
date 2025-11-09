@@ -10,6 +10,7 @@ namespace eCommerceApp.Aplication.DTOs.Review
         public string? UserFullName { get; set; }
         public int Rating { get; set; }
         public string? Comment { get; set; }
+        public string? RejectionReason { get; set; }
         public ReviewStatus Status { get; set; }
         public DateTime CreatedAt { get; set; }
     }

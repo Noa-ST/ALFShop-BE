@@ -3,6 +3,7 @@
     public enum ReviewStatus
     {
         Pending,
-        Approved
+        Approved,
+        Rejected // ✅ Thêm trạng thái từ chối để khớp với logic repository/service
     }
 }
