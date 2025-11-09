@@ -22,8 +22,8 @@ namespace eCommerceApp.Infrastructure
                 }
             }
 
-            string adminEmail = "admin@aifshop.com";
-            string adminPassword = "Admin@123";
+            string adminEmail = "Admin@aifshop.com";
+            string adminPassword = "Admin@aifshop";
 
             var adminUser = await userManager.FindByEmailAsync(adminEmail);
             if (adminUser == null)

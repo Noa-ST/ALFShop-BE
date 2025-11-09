@@ -1,4 +1,4 @@
-﻿// Top-level statements in Program.cs
+// Top-level statements in Program.cs
 using eCommerceApp.Aplication.DependencyInjection;
 using eCommerceApp.Infrastructure.DependencyInjection;
 using eCommerceApp.Infrastructure.Realtime;
@@ -8,6 +8,7 @@ using Serilog;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection; // ✅ Thêm
 using System.IO; // ✅ Thêm
+using eCommerceApp.Infrastructure; // ✅ Gọi DbSeeder
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -94,6 +95,9 @@ builder.Services.AddDataProtection()
 try
 {
     var app = builder.Build();
+
+    // ✅ Seed tài khoản Admin và các vai trò nếu chưa tồn tại
+    await DbSeeder.SeedAdminAsync(app.Services);
 
     // Bật Swagger cả Production nếu muốn healthCheckPath = /swagger
     app.UseSwagger();
