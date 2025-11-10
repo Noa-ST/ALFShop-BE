@@ -324,14 +324,19 @@ namespace eCommerceApp.Infrastructure.Repositories
             }
             else
             {
-                var grouped = await query
-                    .GroupBy(x => x.CreatedAt.Date)
+                // Materialize trước rồi group ở memory để tránh lỗi EF Core khi GroupBy theo Date
+                var data = await query
+                    .Select(x => new { Date = x.CreatedAt.Date, Revenue = x.p.Amount - x.p.RefundedAmount })
+                    .ToListAsync();
+
+                var grouped = data
+                    .GroupBy(x => x.Date)
                     .Select(g => new ValueTuple<DateTime, decimal, int>(
                         g.Key,
-                        g.Sum(x => x.p.Amount - x.p.RefundedAmount),
+                        g.Sum(x => x.Revenue),
                         g.Count()))
                     .OrderBy(x => x.Item1)
-                    .ToListAsync();
+                    .ToList();
 
                 return grouped;
             }
