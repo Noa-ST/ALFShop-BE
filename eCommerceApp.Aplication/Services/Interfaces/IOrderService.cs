@@ -26,6 +26,16 @@ namespace eCommerceApp.Aplication.Services.Interfaces
         
         // ✅ New: Customer Confirm Delivery
         Task<ServiceResponse<bool>> ConfirmDeliveryAsync(Guid id, string userId);
+        
+        // New: Shop revenue summary
+        Task<ServiceResponse<eCommerceApp.Aplication.DTOs.Order.ShopRevenueSummaryDto>> GetShopRevenueSummaryAsync(
+            Guid shopId,
+            DateTime? from = null,
+            DateTime? to = null,
+            string? groupBy = "day",
+            bool onlyPaid = true,
+            eCommerceApp.Domain.Enums.OrderStatus? status = eCommerceApp.Domain.Enums.OrderStatus.Delivered,
+            IEnumerable<eCommerceApp.Domain.Enums.PaymentMethod>? paymentMethods = null);
     }
 }
 

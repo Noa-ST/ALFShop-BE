@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Domain.Entities;
+using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Repositories;
 using eCommerceApp.Infrastructure.Data;
@@ -199,6 +199,142 @@ namespace eCommerceApp.Infrastructure.Repositories
                     p.Amount,
                     p.CreatedAt))
                 .ToListAsync();
+        }
+
+        // ✅ New: Aggregations per shop using paid-date
+        public async Task<(decimal TotalRevenue, decimal Cash, decimal Cod, decimal Bank, decimal Wallet, int PaidCount)> GetShopPaidRevenueBreakdownAsync(
+            Guid shopId,
+            DateTime? from = null,
+            DateTime? to = null,
+            IEnumerable<PaymentMethod>? methods = null)
+        {
+            var paidHistories = _context.PaymentHistories
+                .Where(ph => ph.NewStatus == PaymentStatus.Paid)
+                .AsQueryable();
+
+            var query = from ph in paidHistories
+                        join p in _context.Payments on ph.PaymentId equals p.PaymentId
+                        join o in _context.Orders on p.OrderId equals o.Id
+                        where o.ShopId == shopId && p.Status == PaymentStatus.Paid
+                        select new { p, ph.CreatedAt };
+
+            if (from.HasValue)
+            {
+                query = query.Where(x => x.CreatedAt >= from.Value);
+            }
+            if (to.HasValue)
+            {
+                var endInclusive = to.Value.AddDays(1).AddTicks(-1);
+                query = query.Where(x => x.CreatedAt <= endInclusive);
+            }
+            if (methods != null)
+            {
+                var methodList = methods.ToList();
+                if (methodList.Count > 0)
+                {
+                    query = query.Where(x => methodList.Contains(x.p.Method));
+                }
+            }
+
+            var byMethod = await query
+                .GroupBy(x => x.p.Method)
+                .Select(g => new
+                {
+                    Method = g.Key,
+                    Revenue = g.Sum(x => x.p.Amount - x.p.RefundedAmount),
+                    Count = g.Count()
+                })
+                .ToListAsync();
+
+            var totalRevenue = byMethod.Sum(x => x.Revenue);
+            var paidCount = byMethod.Sum(x => x.Count);
+            decimal cash = 0, cod = 0, bank = 0, wallet = 0;
+            foreach (var m in byMethod)
+            {
+                switch (m.Method)
+                {
+                    case PaymentMethod.Cash: cash = m.Revenue; break;
+                    case PaymentMethod.COD: cod = m.Revenue; break;
+                    case PaymentMethod.Bank: bank = m.Revenue; break;
+                    case PaymentMethod.Wallet: wallet = m.Revenue; break;
+                }
+            }
+
+            return (totalRevenue, cash, cod, bank, wallet, paidCount);
+        }
+
+        public async Task<List<(DateTime BucketStart, decimal Revenue, int PaidCount)>> GetShopPaidRevenueTimeseriesAsync(
+            Guid shopId,
+            DateTime? from = null,
+            DateTime? to = null,
+            string groupBy = "day",
+            IEnumerable<PaymentMethod>? methods = null)
+        {
+            var paidHistories = _context.PaymentHistories
+                .Where(ph => ph.NewStatus == PaymentStatus.Paid)
+                .AsQueryable();
+
+            var query = from ph in paidHistories
+                        join p in _context.Payments on ph.PaymentId equals p.PaymentId
+                        join o in _context.Orders on p.OrderId equals o.Id
+                        where o.ShopId == shopId && p.Status == PaymentStatus.Paid
+                        select new { p, ph.CreatedAt };
+
+            if (from.HasValue)
+            {
+                query = query.Where(x => x.CreatedAt >= from.Value);
+            }
+            if (to.HasValue)
+            {
+                var endInclusive = to.Value.AddDays(1).AddTicks(-1);
+                query = query.Where(x => x.CreatedAt <= endInclusive);
+            }
+            if (methods != null)
+            {
+                var methodList = methods.ToList();
+                if (methodList.Count > 0)
+                {
+                    query = query.Where(x => methodList.Contains(x.p.Method));
+                }
+            }
+
+            if (string.Equals(groupBy, "week", StringComparison.OrdinalIgnoreCase))
+            {
+                var data = await query
+                    .Select(x => new { Date = x.CreatedAt, Revenue = x.p.Amount - x.p.RefundedAmount })
+                    .ToListAsync();
+
+                DateTime StartOfWeek(DateTime dt)
+                {
+                    var d = dt.Date;
+                    int diff = (int)d.DayOfWeek == 0 ? -6 : 1 - (int)d.DayOfWeek; // Monday as start
+                    return d.AddDays(diff);
+                }
+
+                var grouped = data
+                    .GroupBy(x => StartOfWeek(x.Date))
+                    .Select(g => new ValueTuple<DateTime, decimal, int>(
+                        g.Key,
+                        g.Sum(x => x.Revenue),
+                        g.Count()))
+                    .OrderBy(x => x.Item1)
+                    .ToList();
+
+                return grouped;
+            }
+            else
+            {
+                var grouped = await query
+                    .GroupBy(x => x.CreatedAt.Date)
+                    .Select(g => new ValueTuple<DateTime, decimal, int>(
+                        g.Key,
+                        g.Sum(x => x.p.Amount - x.p.RefundedAmount),
+                        g.Count()))
+                    .OrderBy(x => x.Item1)
+                    .ToListAsync();
+
+                return grouped;
+            }
         }
         
         // ✅ New: Add payment with transaction support

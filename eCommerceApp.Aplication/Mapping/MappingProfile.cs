@@ -40,7 +40,7 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<OrderSettlement, OrderSettlementDto>()
                 .ReverseMap();
 
-            // 🔥 Loại bỏ mapping Review trùng để tránh AutoMapper TypeMap conflict
+            // (Đã bỏ CreateMap<Review, GetReview> trùng)
             // (Đã khai báo trong MappingConfig)
             CreateMap<Review, eCommerceApp.Aplication.DTOs.Review.GetReview>();
         }

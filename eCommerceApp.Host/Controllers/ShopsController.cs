@@ -13,10 +13,12 @@ namespace eCommerceApp.Host.Controllers
     public class ShopsController : ControllerBase
     {
         private readonly IShopService _shopService;
+        private readonly IOrderService _orderService;
 
-        public ShopsController(IShopService shopService)
+        public ShopsController(IShopService shopService, IOrderService orderService)
         {
             _shopService = shopService;
+            _orderService = orderService;
         }
 
         [HttpGet("getall-active")]
@@ -146,6 +148,69 @@ namespace eCommerceApp.Host.Controllers
             return response.Succeeded
                 ? Ok(response)
                 : StatusCode((int)response.StatusCode, response);
+        }
+
+        // New: Revenue summary for a shop
+        [HttpGet("{shopId:guid}/revenue/summary")]
+        [Authorize(Roles = "Seller,Admin")]
+        [ProducesResponseType(typeof(ServiceResponse<eCommerceApp.Aplication.DTOs.Order.ShopRevenueSummaryDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> GetRevenueSummary(
+            Guid shopId,
+            [FromQuery] DateTime? from = null,
+            [FromQuery] DateTime? to = null,
+            [FromQuery] string? groupBy = "day",
+            [FromQuery] bool onlyPaid = true,
+            [FromQuery] string? status = "Delivered",
+            [FromQuery] string[]? paymentMethod = null)
+        {
+            if (shopId == Guid.Empty)
+            {
+                return BadRequest(new { message = "ShopId không hợp lệ." });
+            }
+
+            // ✅ Ownership check: Seller chỉ được xem doanh thu của shop mình sở hữu
+            if (!User.IsInRole("Admin"))
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
+                }
+
+                var myShops = await _shopService.GetBySellerIdAsync(userId);
+                var ownsShop = myShops?.Any(s => s.Id == shopId) == true;
+                if (!ownsShop)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền truy cập doanh thu của shop này." });
+                }
+            }
+
+            // Parse status & payment methods
+            eCommerceApp.Domain.Enums.OrderStatus? parsedStatus = null;
+            if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<eCommerceApp.Domain.Enums.OrderStatus>(status, true, out var s))
+            {
+                parsedStatus = s;
+            }
+
+            IEnumerable<eCommerceApp.Domain.Enums.PaymentMethod>? methods = null;
+            if (paymentMethod != null && paymentMethod.Length > 0)
+            {
+                var list = new List<eCommerceApp.Domain.Enums.PaymentMethod>();
+                foreach (var m in paymentMethod)
+                {
+                    if (Enum.TryParse<eCommerceApp.Domain.Enums.PaymentMethod>(m, true, out var pm))
+                    {
+                        list.Add(pm);
+                    }
+                }
+                methods = list;
+            }
+
+            var response = await _orderService.GetShopRevenueSummaryAsync(shopId, from, to, groupBy, onlyPaid, parsedStatus, methods);
+            return StatusCode((int)response.StatusCode, response);
         }
     }
 }

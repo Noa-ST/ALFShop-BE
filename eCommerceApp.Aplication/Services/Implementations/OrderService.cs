@@ -945,5 +945,236 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     HttpStatusCode.InternalServerError);
             }
         }
+
+        // New: Shop revenue summary
+        public async Task<ServiceResponse<eCommerceApp.Aplication.DTOs.Order.ShopRevenueSummaryDto>> GetShopRevenueSummaryAsync(
+            Guid shopId,
+            DateTime? from = null,
+            DateTime? to = null,
+            string? groupBy = "day",
+            bool onlyPaid = true,
+            OrderStatus? status = OrderStatus.Delivered,
+            IEnumerable<PaymentMethod>? paymentMethods = null)
+        {
+            try
+            {
+                var breakdown = await _unitOfWork.Payments.GetShopPaidRevenueBreakdownAsync(
+                    shopId,
+                    from,
+                    to,
+                    paymentMethods);
+
+                var timeseriesRaw = await _unitOfWork.Payments.GetShopPaidRevenueTimeseriesAsync(
+                    shopId,
+                    from,
+                    to,
+                    groupBy ?? "day",
+                    paymentMethods);
+
+                var timeseries = timeseriesRaw
+                    .Select(x => new eCommerceApp.Aplication.DTOs.Order.RevenueTimeseriesPointDto
+                    {
+                        Date = x.BucketStart.ToString("yyyy-MM-dd"),
+                        Revenue = x.Revenue,
+                        Orders = x.PaidCount,
+                        PaidOrders = x.PaidCount
+                    })
+                    .ToList();
+
+                var (_, totalCount) = await _orderRepo.SearchAndFilterAsync(
+                    null,
+                    status ?? OrderStatus.Delivered,
+                    shopId,
+                    null,
+                    from,
+                    to,
+                    null,
+                    null,
+                    "createdAt",
+                    "asc",
+                    1,
+                    1);
+
+                var paidOrders = breakdown.PaidCount;
+                var aov = paidOrders > 0 ? Math.Round(breakdown.TotalRevenue / paidOrders, 2) : 0m;
+
+                var dto = new eCommerceApp.Aplication.DTOs.Order.ShopRevenueSummaryDto
+                {
+                    TotalRevenue = breakdown.TotalRevenue,
+                    ByMethod = new eCommerceApp.Aplication.DTOs.Order.RevenueByMethodDto
+                    {
+                        Cash = breakdown.Cash,
+                        Cod = breakdown.Cod,
+                        Bank = breakdown.Bank,
+                        Wallet = breakdown.Wallet
+                    },
+                    Orders = new eCommerceApp.Aplication.DTOs.Order.OrdersStatsDto
+                    {
+                        TotalOrders = totalCount,
+                        PaidOrders = paidOrders,
+                        RefundedOrders = 0
+                    },
+                    Aov = aov,
+                    Timeseries = timeseries
+                };
+
+                return ServiceResponse<eCommerceApp.Aplication.DTOs.Order.ShopRevenueSummaryDto>.Success(dto, "Tổng hợp doanh thu shop thành công.");
+            }
+            catch (Exception ex)
+            {
+                return ServiceResponse<eCommerceApp.Aplication.DTOs.Order.ShopRevenueSummaryDto>.Fail(
+                    $"Lỗi khi tổng hợp doanh thu: {ex.Message}",
+                    HttpStatusCode.InternalServerError);
+            }
+        }
+
+        private static DateTime StartOfWeek(DateTime date, DayOfWeek startOfWeek)
+        {
+            int diff = (7 + (date.DayOfWeek - startOfWeek)) % 7;
+            var start = date.Date.AddDays(-1 * diff);
+            return start;
+        }
+
+        // ✅ New: Update Tracking Number
+        public async Task<ServiceResponse<bool>> UpdateTrackingNumberAsync(Guid id, string trackingNumber, string userId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Không thể xác định người dùng.",
+                        HttpStatusCode.Unauthorized);
+                }
+
+                if (string.IsNullOrWhiteSpace(trackingNumber))
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Mã vận chuyển không được để trống.",
+                        HttpStatusCode.BadRequest);
+                }
+
+                var order = await _orderRepo.GetByIdAsync(id);
+                if (order == null)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Không tìm thấy đơn hàng.",
+                        HttpStatusCode.NotFound);
+                }
+
+                // Validate ownership: Seller chỉ có thể update tracking number của shop mình, Admin có thể update tất cả
+                var isAdmin = IsAdmin(userId);
+                var shop = await _shopRepo.GetByIdAsync(order.ShopId);
+                var isShopOwner = shop != null && shop.SellerId == userId;
+
+                if (!isAdmin && !isShopOwner)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Bạn không có quyền cập nhật mã vận chuyển cho đơn hàng này.",
+                        HttpStatusCode.Forbidden);
+                }
+
+                // Validate status: Chỉ có thể update tracking number khi order đã được shipped hoặc delivered
+                if (order.Status != OrderStatus.Shipped && order.Status != OrderStatus.Delivered)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        $"Chỉ có thể cập nhật mã vận chuyển khi đơn hàng ở trạng thái Shipped hoặc Delivered. Trạng thái hiện tại: {order.Status}",
+                        HttpStatusCode.BadRequest);
+                }
+
+                await _orderRepo.UpdateTrackingNumberAsync(id, trackingNumber.Trim());
+                return ServiceResponse<bool>.Success(true, "Cập nhật mã vận chuyển thành công.");
+            }
+            catch (Exception ex)
+            {
+                return ServiceResponse<bool>.Fail(
+                    $"Lỗi khi cập nhật mã vận chuyển: {ex.Message}",
+                    HttpStatusCode.InternalServerError);
+            }
+        }
+
+        // ✅ New: Customer Confirm Delivery
+        public async Task<ServiceResponse<bool>> ConfirmDeliveryAsync(Guid id, string userId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Không thể xác định người dùng.",
+                        HttpStatusCode.Unauthorized);
+                }
+
+                // 1. Validate order exists
+                var order = await _orderRepo.GetByIdAsync(id);
+                if (order == null)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Không tìm thấy đơn hàng.",
+                        HttpStatusCode.NotFound);
+                }
+
+                // 2. Validate ownership: Chỉ Customer của đơn hàng mới có thể confirm delivery
+                var isCustomer = order.CustomerId == userId;
+                if (!isCustomer)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        "Bạn không có quyền xác nhận nhận hàng cho đơn hàng này. Chỉ khách hàng sở hữu đơn hàng mới có thể xác nhận.",
+                        HttpStatusCode.Forbidden);
+                }
+
+                // 3. Validate status: Chỉ có thể confirm delivery khi order đã được shipped
+                if (order.Status != OrderStatus.Shipped)
+                {
+                    return ServiceResponse<bool>.Fail(
+                        $"Không thể xác nhận nhận hàng. Đơn hàng phải ở trạng thái Shipped. Trạng thái hiện tại: {order.Status}",
+                        HttpStatusCode.BadRequest);
+                }
+
+                // 4. Update status to Delivered
+                await _orderRepo.UpdateStatusAsync(id, OrderStatus.Delivered.ToString());
+                await _unitOfWork.SaveChangesAsync();
+
+                // ✅ Removed: Auto-update payment status when customer confirms delivery
+                // Payment status should only be updated when customer explicitly confirms COD payment via PaymentService.ProcessPaymentAsync
+                // This allows customer to confirm payment after receiving the order
+
+                // 6. ✅ Auto-calculate settlement khi order được Delivered
+                if (_settlementService != null)
+                {
+                    try
+                    {
+                        // Chỉ tính settlement nếu order đã Paid
+                        if (order.PaymentStatus == PaymentStatus.Paid)
+                        {
+                            var settlementResult = await _settlementService.CalculateSettlementForOrderAsync(id);
+                            if (settlementResult.Succeeded)
+                            {
+                                _logger.LogInformation($"Auto-calculated settlement for order after customer confirm delivery: OrderId={id}");
+                            }
+                            else
+                            {
+                                _logger.LogWarning($"Failed to auto-calculate settlement for order after customer confirm delivery: OrderId={id}, Reason={settlementResult.Message}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error nhưng không fail delivery confirmation
+                        _logger.LogError(ex, $"Error auto-calculating settlement for order after customer confirm delivery: OrderId={id}, Error={ex.Message}");
+                    }
+                }
+
+                _logger.LogInformation($"Customer confirmed delivery successfully: OrderId={id}, CustomerId={userId}");
+                return ServiceResponse<bool>.Success(true, "Xác nhận nhận hàng thành công.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to confirm delivery: OrderId={id}, UserId={userId}, Error={ex.Message}");
+                return ServiceResponse<bool>.Fail(
+                    $"Lỗi khi xác nhận nhận hàng: {ex.Message}",
+                    HttpStatusCode.InternalServerError);
+            }
+        }
     }
 }
