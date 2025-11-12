@@ -7,18 +7,13 @@ namespace eCommerceApp.Domain.Entities
     public class Shop : AuditableEntity
     {
         [Required]
-        public string SellerId { get; set; } = null!; // FK -> User.Id
-
+        public string SellerId { get; set; } = null!;
         [Required, MaxLength(100)]
         public string Name { get; set; } = null!;
-
         public string? Description { get; set; }
         public string? Logo { get; set; }
-        // Dùng float để phù hợp với DTO và việc tính điểm trung bình
         [Range(0.0, 5.0)]
         public float AverageRating { get; set; } = 0.0f;
-
-        // Số lượng đánh giá (cần thiết cho độ tin cậy của Rating)
         public int ReviewCount { get; set; } = 0;
 
         // ✅ [BỔ SUNG THÔNG TIN ĐỊA CHỈ SHOP]
@@ -38,5 +33,17 @@ namespace eCommerceApp.Domain.Entities
         public ICollection<ShopCategory>? ShopCategories { get; set; }
         public ICollection<Promotion>? Promotions { get; set; }
         public ICollection<Message>? Messages { get; set; }
+
+        // Featured fields
+        public bool IsPinned { get; set; } = false;
+        public double? FeaturedWeight { get; set; }
+        public double RankingScore { get; set; } = 0;
+        public DateTime? PinnedUntil { get; set; }
+
+        // Ranking metrics
+        public float FulfilledRate { get; set; } = 0.0f;
+        public float ReturnRate { get; set; } = 0.0f;
+        public bool OnlineStatus { get; set; } = false;
+        public int AverageResponseTimeSeconds { get; set; } = 0;
     }
 }

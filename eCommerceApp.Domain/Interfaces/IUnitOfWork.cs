@@ -26,6 +26,10 @@ namespace eCommerceApp.Domain.Interfaces
 
         // ✅ Thêm: Review repository để dùng trong ReviewService
         IReviewRepository Reviews { get; }
+
+        // ✅ New: Featured analytics & ranking repositories
+        IFeaturedEventRepository FeaturedEvents { get; }
+        IFeaturedRankingRepository FeaturedRankings { get; }
         
         // Transaction management
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

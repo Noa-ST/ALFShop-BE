@@ -212,5 +212,14 @@ namespace eCommerceApp.Host.Controllers
             var response = await _orderService.GetShopRevenueSummaryAsync(shopId, from, to, groupBy, onlyPaid, parsedStatus, methods);
             return StatusCode((int)response.StatusCode, response);
         }
+
+        // GET /api/Shops/featured?limit=6&city=Hanoi
+        [HttpGet("featured")]
+        [ProducesResponseType(typeof(ServiceResponse<IEnumerable<eCommerceApp.Aplication.DTOs.Featured.FeaturedShopDto>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetFeatured([FromServices] IFeaturedService featuredService, [FromQuery] int limit = 6, [FromQuery] string? city = null)
+        {
+            var data = await featuredService.GetFeaturedShopsAsync(limit, city);
+            return Ok(ServiceResponse<IEnumerable<eCommerceApp.Aplication.DTOs.Featured.FeaturedShopDto>>.Success(data));
+        }
     }
 }

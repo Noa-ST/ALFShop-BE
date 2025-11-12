@@ -249,3 +249,20 @@ namespace eCommerceApp.Host.Controllers
         }
     }
 }
+
+public class ProductsController : ControllerBase
+{
+    // GET /api/Products/featured?limit=12&categoryId=...&priceMin=...&priceMax=...
+    [HttpGet("featured")]
+    [ProducesResponseType(typeof(ServiceResponse<IEnumerable<eCommerceApp.Aplication.DTOs.Featured.FeaturedProductDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetFeatured(
+        [FromServices] IFeaturedService featuredService,
+        [FromQuery] int limit = 12,
+        [FromQuery] Guid? categoryId = null,
+        [FromQuery] decimal? priceMin = null,
+        [FromQuery] decimal? priceMax = null)
+    {
+        var data = await featuredService.GetFeaturedProductsAsync(limit, categoryId, priceMin, priceMax);
+        return Ok(ServiceResponse<IEnumerable<eCommerceApp.Aplication.DTOs.Featured.FeaturedProductDto>>.Success(data));
+    }
+}

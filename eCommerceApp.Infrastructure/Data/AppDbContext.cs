@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore;
 using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
@@ -38,6 +38,10 @@ namespace eCommerceApp.Infrastructure.Data
         public DbSet<SellerBalance> SellerBalances { get; set; } = null!;
         public DbSet<Settlement> Settlements { get; set; } = null!;
         public DbSet<OrderSettlement> OrderSettlements { get; set; } = null!;
+
+        // ✅ New: Featured analytics & ranking
+        public DbSet<FeaturedEvent> FeaturedEvents { get; set; } = null!;
+        public DbSet<FeaturedRanking> FeaturedRankings { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -482,6 +486,17 @@ namespace eCommerceApp.Infrastructure.Data
             modelBuilder.Entity<Promotion>()
                 .HasIndex(p => p.Code)
                 .IsUnique();
+
+            // ---------- FeaturedEvent & FeaturedRanking ----------
+            modelBuilder.Entity<FeaturedEvent>()
+                .HasIndex(fe => new { fe.EntityType, fe.EntityId, fe.EventType, fe.CreatedAt });
+
+            modelBuilder.Entity<FeaturedRanking>()
+                .HasIndex(fr => new { fr.EntityType, fr.EntityId, fr.ComputedAt });
+
+            // Global query filters for soft-delete
+            modelBuilder.Entity<FeaturedEvent>().HasQueryFilter(e => !e.IsDeleted);
+            modelBuilder.Entity<FeaturedRanking>().HasQueryFilter(r => !r.IsDeleted);
         }
     }
 }

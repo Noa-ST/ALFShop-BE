@@ -9,12 +9,14 @@ using eCommerceApp.Domain.Entities;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.Extensions.DependencyInjection;
+using eCommerceApp.Aplication.Services.Interfaces;
+using eCommerceApp.Aplication.Services.Implementations;
 
 namespace eCommerceApp.Aplication.DependencyInjection
 {
     public static class ServiceContainer
     {
-        public static IServiceCollection AddApplicationService(this IServiceCollection services)
+        public static IServiceCollection AddApplicationServices(this IServiceCollection services)
         {
             services.AddAutoMapper(typeof(MappingConfig));
             services.AddScoped<IProductService, ProductService>();
@@ -33,6 +35,8 @@ namespace eCommerceApp.Aplication.DependencyInjection
             services.AddScoped<IPaymentService, PaymentService>();
             services.AddScoped<ISettlementService, SettlementService>(); // ✅ New
             services.AddScoped<IConversationService, ConversationService>();
+            services.AddMemoryCache();
+            services.AddScoped<IFeaturedService, FeaturedService>();
 
             // PayOS Service - Đăng ký với HttpClient để hỗ trợ HTTP calls
             services.AddHttpClient<IPayOSService, PayOSService>();

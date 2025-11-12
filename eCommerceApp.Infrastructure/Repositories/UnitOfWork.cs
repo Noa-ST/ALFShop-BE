@@ -29,6 +29,8 @@ namespace eCommerceApp.Infrastructure.Repositories
         private IProductImageRepository? _productImages;
         private ISellerBalanceRepository? _sellerBalances; // ✅ New
         private IReviewRepository? _reviews; // ✅ New
+        private IFeaturedEventRepository? _featuredEvents; // ✅ New
+        private IFeaturedRankingRepository? _featuredRankings; // ✅ New
 
         public UnitOfWork(AppDbContext context)
         {
@@ -77,6 +79,12 @@ namespace eCommerceApp.Infrastructure.Repositories
 
         public IReviewRepository Reviews =>
             _reviews ??= new ReviewRepository(_context); // ✅ New
+
+        public IFeaturedEventRepository FeaturedEvents =>
+            _featuredEvents ??= new FeaturedEventRepository(_context); // ✅ New
+
+        public IFeaturedRankingRepository FeaturedRankings =>
+            _featuredRankings ??= new FeaturedRankingRepository(_context); // ✅ New
 
         // Transaction management
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

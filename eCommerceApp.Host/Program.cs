@@ -24,7 +24,7 @@ Log.Logger.Information("Application is building...");
 
 // ---- Application & Infrastructure DI ----
 builder.Services.AddInfrastructureService(builder.Configuration);
-builder.Services.AddApplicationService();
+builder.Services.AddApplicationServices();
 
 // ✅ Đăng ký IHttpContextAccessor để sử dụng trong services
 builder.Services.AddHttpContextAccessor();

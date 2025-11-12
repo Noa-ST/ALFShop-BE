@@ -8,7 +8,6 @@ namespace eCommerceApp.Domain.Entities
     {
         [Required]
         public string Name { get; set; } = null!;
-
         public string? Description { get; set; }
 
         // --- Cấu trúc Phân cấp (Hierarchical) ---
@@ -22,5 +21,10 @@ namespace eCommerceApp.Domain.Entities
 
         public ICollection<Product>? Products { get; set; }
 
+        // Featured fields
+        public bool IsPinned { get; set; } = false;
+        public double? FeaturedWeight { get; set; }
+        public double RankingScore { get; set; } = 0;
+        public DateTime? PinnedUntil { get; set; }
     }
 }

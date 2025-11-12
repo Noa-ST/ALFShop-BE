@@ -111,6 +111,8 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IMessageRepository, MessageRepository>();
             services.AddScoped<ISellerBalanceRepository, SellerBalanceRepository>(); // ✅ New
             services.AddScoped<IReviewRepository, ReviewRepository>(); // ✅ New
+            services.AddScoped<IFeaturedEventRepository, FeaturedEventRepository>(); // ✅ New
+            services.AddScoped<IFeaturedRankingRepository, FeaturedRankingRepository>(); // ✅ New
             services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
             services.AddScoped<IEmailService, EmailService>();
 
@@ -121,6 +123,7 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddHostedService<RefreshTokenCleanupService>();
             services.AddHostedService<PaymentLinkExpirationService>(); // ✅ New: Auto-expire payment links
             services.AddHostedService<OrderExpirationService>(); // ✅ New: Auto-cancel unpaid orders
+            services.AddHostedService<FeaturedRankingService>(); // ✅ New: Periodic featured ranking computation
 
             return services;
         }

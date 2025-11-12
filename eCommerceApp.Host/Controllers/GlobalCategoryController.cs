@@ -129,5 +129,14 @@ namespace eCommerceApp.Host.Controllers
                 ? Ok(response)
                 : StatusCode((int)response.StatusCode, response);
         }
+
+        // GET /api/Categories/featured?limit=6&region=VN
+        [HttpGet("/api/Categories/featured")]
+        [ProducesResponseType(typeof(ServiceResponse<IEnumerable<eCommerceApp.Aplication.DTOs.Featured.FeaturedCategoryDto>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetFeatured([FromServices] IFeaturedService featuredService, [FromQuery] int limit = 6, [FromQuery] string? region = null)
+        {
+            var data = await featuredService.GetFeaturedCategoriesAsync(limit, region);
+            return Ok(ServiceResponse<IEnumerable<eCommerceApp.Aplication.DTOs.Featured.FeaturedCategoryDto>>.Success(data));
+        }
     }
 }
