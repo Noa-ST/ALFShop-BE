@@ -52,7 +52,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // Xóa lý do cũ (nếu có) nếu Admin không cung cấp lý do mới
                 product.Reason = null;
             }
-           
+
 
             int result = await productRepo.UpdateStatusAsync(product);
 
@@ -60,8 +60,8 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 ? ServiceResponse.Success("Từ chối sản phẩm thành công. Lý do đã được ghi nhận.")
                 : ServiceResponse.Fail("Lỗi cập nhật CSDL khi từ chối sản phẩm.", HttpStatusCode.InternalServerError);
         }
-    
-    public async Task<ServiceResponse> ApproveProductAsync(Guid productId)
+
+        public async Task<ServiceResponse> ApproveProductAsync(Guid productId)
         {
             var product = await productRepo.GetByIdAsync(productId);
 
@@ -132,14 +132,14 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         .ToList();
 
                     var usedIds = new HashSet<Guid>(); // ✅ Track các Id đã sử dụng để tránh duplicate
-                    
+
                     // ✅ Dùng IWebHostEnvironment để lấy đường dẫn wwwroot chính xác
                     string webRoot = webHostEnvironment.WebRootPath;
                     if (string.IsNullOrEmpty(webRoot))
                     {
                         webRoot = Path.Combine(webHostEnvironment.ContentRootPath, "wwwroot");
                     }
-                    
+
                     string uploadRoot = Path.Combine(webRoot, "uploads", "products");
                     Directory.CreateDirectory(uploadRoot);
 
@@ -168,7 +168,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                                 {
                                     // data:image/png;base64,XXXXX
                                     var headerEnd = input.IndexOf(",");
-                                    if (headerEnd < 0) 
+                                    if (headerEnd < 0)
                                     {
                                         // Skip ảnh không hợp lệ
                                         continue;
@@ -215,7 +215,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                             {
                                 imageId = Guid.NewGuid();
                             } while (usedIds.Contains(imageId));
-                            
+
                             usedIds.Add(imageId);
 
                             outputImages.Add(new ProductImage
@@ -242,17 +242,17 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 {
                     return new ServiceResponse(false, "Không có ảnh nào được xử lý thành công. Vui lòng kiểm tra định dạng ảnh.");
                 }
-                
+
                 int result = await productRepo.AddWithImagesAsync(entity, outputImages);
 
                 if (result > 0)
                 {
-                    string message = outputImages.Count > 0 
-                        ? $"Product created successfully with {outputImages.Count} image(s)." 
+                    string message = outputImages.Count > 0
+                        ? $"Product created successfully with {outputImages.Count} image(s)."
                         : "Product created successfully.";
                     return new ServiceResponse(true, message);
                 }
-                
+
                 return new ServiceResponse(false, "Failed to create product.");
             }
             catch (Exception ex)
@@ -294,18 +294,117 @@ namespace eCommerceApp.Aplication.Services.Implementations
             // ✅ Fix: Sử dụng repository method để đảm bảo atomicity khi update images
             try
             {
-                // Prepare new images if provided
+                // Prepare new images if provided (process data URLs => save files, keep http/relative as-is)
                 IEnumerable<ProductImage>? newImages = null;
                 if (product.ImageUrls != null && product.ImageUrls.Any())
                 {
-                    newImages = product.ImageUrls.Select(url => new ProductImage
+                    var distinctInputs = product.ImageUrls
+                        .Where(u => !string.IsNullOrWhiteSpace(u))
+                        .Select(u => u.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    // Use IWebHostEnvironment to compute wwwroot
+                    string webRoot = webHostEnvironment.WebRootPath;
+                    if (string.IsNullOrEmpty(webRoot))
                     {
-                        Id = Guid.NewGuid(),
-                        ProductId = existing.Id,
-                        Url = url,
-                        CreatedAt = DateTime.UtcNow,
-                        IsDeleted = false
-                    }).ToList();
+                        webRoot = Path.Combine(webHostEnvironment.ContentRootPath, "wwwroot");
+                    }
+                    string uploadRoot = Path.Combine(webRoot, "uploads", "products");
+                    Directory.CreateDirectory(uploadRoot);
+
+                    var imgs = new List<ProductImage>();
+                    var usedIds = new HashSet<Guid>();
+
+                    foreach (var input in distinctInputs)
+                    {
+                        try
+                        {
+                            string finalUrl;
+
+                            bool isHttp = input.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                                          || input.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+                            bool isDataUrl = input.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+                                             && input.Contains(";base64,");
+
+                            if (isHttp)
+                            {
+                                finalUrl = input; // keep full URL
+                            }
+                            else
+                            {
+                                // handle data URL or raw base64
+                                string base64Part = input;
+                                string extension = "jpg";
+
+                                if (isDataUrl)
+                                {
+                                    var headerEnd = input.IndexOf(",");
+                                    if (headerEnd < 0) continue;
+                                    var header = input.Substring(0, headerEnd);
+                                    base64Part = input[(headerEnd + 1)..];
+                                    if (header.Contains("image/png", StringComparison.OrdinalIgnoreCase)) extension = "png";
+                                    else if (header.Contains("image/jpeg", StringComparison.OrdinalIgnoreCase) || header.Contains("image/jpg", StringComparison.OrdinalIgnoreCase)) extension = "jpg";
+                                    else if (header.Contains("image/webp", StringComparison.OrdinalIgnoreCase)) extension = "webp";
+                                }
+
+                                // If input looks like a relative path already (starts with "/") keep it
+                                if (!isDataUrl && input.StartsWith("/"))
+                                {
+                                    finalUrl = input;
+                                }
+                                else if (!isDataUrl && !isHttp && !input.StartsWith("/"))
+                                {
+                                    // treat as filename or relative path
+                                    finalUrl = input;
+                                }
+                                else
+                                {
+                                    // Save base64 to file
+                                    var fileName = $"{Guid.NewGuid():N}.{extension}";
+                                    var filePath = Path.Combine(uploadRoot, fileName);
+                                    try
+                                    {
+                                        byte[] imageBytes = Convert.FromBase64String(base64Part);
+                                        if (imageBytes == null || imageBytes.Length == 0) continue;
+                                        await File.WriteAllBytesAsync(filePath, imageBytes);
+                                        finalUrl = $"/uploads/products/{fileName}";
+                                    }
+                                    catch (FormatException)
+                                    {
+                                        // invalid base64
+                                        continue;
+                                    }
+                                    catch
+                                    {
+                                        continue;
+                                    }
+                                }
+
+                            }
+
+                            // assign unique id
+                            Guid imageId;
+                            do { imageId = Guid.NewGuid(); } while (usedIds.Contains(imageId));
+                            usedIds.Add(imageId);
+
+                            imgs.Add(new ProductImage
+                            {
+                                Id = imageId,
+                                ProductId = existing.Id,
+                                Url = finalUrl,
+                                CreatedAt = DateTime.UtcNow,
+                                IsDeleted = false
+                            });
+                        }
+                        catch
+                        {
+                            // skip problematic image
+                            continue;
+                        }
+                    }
+
+                    newImages = imgs;
                 }
 
                 // Update product with images using repository transaction method
@@ -349,12 +448,12 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private string GetFullImageUrl(string? relativeUrl)
         {
             if (string.IsNullOrEmpty(relativeUrl)) return relativeUrl ?? string.Empty;
-            
+
             // Nếu đã là full URL thì giữ nguyên
-            if (relativeUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || 
+            if (relativeUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 relativeUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 return relativeUrl;
-            
+
             // Lấy base URL từ HttpContext
             var request = httpContextAccessor.HttpContext?.Request;
             if (request != null)
@@ -362,7 +461,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 var baseUrl = $"{request.Scheme}://{request.Host}";
                 return $"{baseUrl}{relativeUrl}";
             }
-            
+
             // Fallback cho development
             return $"https://localhost:7109{relativeUrl}";
         }
@@ -382,7 +481,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             var data = await productRepo.GetAllAsync();
             // ✅ Fix: Xóa duplicate filter - Repository đã filter IsDeleted = false rồi
             var products = mapper.Map<IEnumerable<GetProduct>>(data);
-            
+
             // ✅ Convert relative URLs thành full URLs cho tất cả ảnh
             foreach (var product in products)
             {
@@ -395,7 +494,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     }).ToList();
                 }
             }
-            
+
             return products;
         }
 
@@ -403,7 +502,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
         {
             var data = await productRepo.GetByShopIdAsync(shopId);
             var products = mapper.Map<IEnumerable<GetProduct>>(data);
-            
+
             // ✅ Convert relative URLs thành full URLs cho tất cả ảnh
             foreach (var product in products)
             {
@@ -416,7 +515,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     }).ToList();
                 }
             }
-            
+
             return products;
         }
 
@@ -426,7 +525,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
             // Gọi phương thức mới trong Repository
             var data = await productRepo.GetByGlobalCategoryIdAsync(globalCategoryId);
             var products = mapper.Map<IEnumerable<GetProduct>>(data);
-            
+
             // ✅ Convert relative URLs thành full URLs cho tất cả ảnh
             foreach (var product in products)
             {
@@ -439,7 +538,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     }).ToList();
                 }
             }
-            
+
             return products;
         }
 
@@ -453,7 +552,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
             // Bước 2: Dùng Mapper chuyển Entity sang DTO
             var productDetail = mapper.Map<GetProductDetail>(entity);
-            
+
             // ✅ Convert relative URLs thành full URLs cho tất cả ảnh
             if (productDetail.ProductImages != null && productDetail.ProductImages.Any())
             {
@@ -463,7 +562,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                     Url = GetFullImageUrl(img.Url)
                 }).ToList();
             }
-            
+
             return productDetail;
         }
 
