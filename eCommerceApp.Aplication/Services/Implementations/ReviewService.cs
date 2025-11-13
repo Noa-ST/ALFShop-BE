@@ -116,6 +116,13 @@ namespace eCommerceApp.Aplication.Services.Implementations
             };
         }
 
+        public async Task<GetReview?> GetMyReviewForProductAsync(Guid productId, string userId)
+        {
+            var review = await _uow.Reviews.GetUserReviewForProductAsync(productId, userId);
+            if (review == null) return null;
+            return _mapper.Map<GetReview>(review);
+        }
+
         public async Task<ServiceResponse> ApproveAsync(Guid id, string adminId)
         {
             var review = await _uow.Reviews.GetByIdAsync(id);

@@ -25,6 +25,7 @@ namespace eCommerceApp.Aplication.DependencyInjection
             services.AddScoped<IShopCategoryService, ShopCategoryService>();
             services.AddScoped<ICartService, CartService>();
             services.AddScoped<IAddressService, AddressService>();
+            services.AddScoped<IReviewService, ReviewService>();
 
             services.AddFluentValidationAutoValidation();
             services.AddValidatorsFromAssemblyContaining<CreateUserValidator>();

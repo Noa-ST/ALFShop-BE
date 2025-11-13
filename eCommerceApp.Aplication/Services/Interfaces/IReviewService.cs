@@ -9,6 +9,7 @@ namespace eCommerceApp.Aplication.Services.Interfaces
         Task<ServiceResponse> UpdateAsync(Guid id, UpdateReview dto, string userId);
         Task<ServiceResponse> DeleteAsync(Guid id, string userId);
         Task<PagedResult<GetReview>> GetByProductAsync(Guid productId, int page = 1, int pageSize = 20, bool onlyApproved = true);
+        Task<GetReview?> GetMyReviewForProductAsync(Guid productId, string userId);
         Task<ServiceResponse> ApproveAsync(Guid id, string adminId);
         Task<ServiceResponse> RejectAsync(Guid id, string adminId, string reason);
     }
