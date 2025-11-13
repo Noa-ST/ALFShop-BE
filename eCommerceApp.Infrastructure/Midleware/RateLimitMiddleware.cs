@@ -9,7 +9,8 @@ namespace eCommerceApp.Infrastructure.Midleware
     /// </summary>
     public class RateLimitMiddleware
     {
-        private readonly RequestDelegate _next;
+        private readonly Request
+            Delegate _next;
         private readonly int _maxRequests;
         private readonly TimeSpan _timeWindow;
         private readonly ConcurrentDictionary<string, Queue<DateTime>> _requestHistory = new();

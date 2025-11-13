@@ -56,3 +56,18 @@ services:
         sync: false
       - key: Email__FromName
         value: AIFShop
+
+      # Storage
+      - key: Storage__Provider
+        value: Cloudinary
+      - key: Storage__Cloudinary__CloudName
+        value: YOUR_CLOUD_NAME
+      - key: Storage__Cloudinary__UploadPreset
+        value: AIFShop
+      - key: Storage__Cloudinary__Folder
+        value: aifshop/uploads
+      # Nếu Signed:
+      # - key: Storage__Cloudinary__ApiKey
+      #   sync: false
+      # - key: Storage__Cloudinary__ApiSecret
+      #   sync: false

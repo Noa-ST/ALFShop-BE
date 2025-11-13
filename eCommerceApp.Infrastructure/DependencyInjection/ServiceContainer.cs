@@ -119,6 +119,9 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             // ✅ Register UnitOfWork
             services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+            // ✅ New: Register Image Storage (Cloudinary)
+            services.AddSingleton<IImageStorageService, CloudinaryImageStorageService>();
+
             // ✅ Register Background Services
             services.AddHostedService<RefreshTokenCleanupService>();
             services.AddHostedService<PaymentLinkExpirationService>(); // ✅ New: Auto-expire payment links
