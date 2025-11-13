@@ -9,8 +9,6 @@ using eCommerceApp.Domain.Entities;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.Extensions.DependencyInjection;
-using eCommerceApp.Aplication.Services.Interfaces;
-using eCommerceApp.Aplication.Services.Implementations;
 
 namespace eCommerceApp.Aplication.DependencyInjection
 {
@@ -26,6 +24,7 @@ namespace eCommerceApp.Aplication.DependencyInjection
             services.AddScoped<ICartService, CartService>();
             services.AddScoped<IAddressService, AddressService>();
             services.AddScoped<IReviewService, ReviewService>();
+            services.AddScoped<IUserService, UserService>();
 
             services.AddFluentValidationAutoValidation();
             services.AddValidatorsFromAssemblyContaining<CreateUserValidator>();
