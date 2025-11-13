@@ -25,7 +25,7 @@ namespace eCommerceApp.Infrastructure.Repositories
 
         public async Task<IEnumerable<Order>> GetOrdersByCustomerIdAsync(string customerId)
             => await _context.Orders
-                .Where(o => o.CustomerId == customerId)
+                .Where(o => o.CustomerId == customerId && !o.IsDeleted)
                 .Include(o => o.Customer)
                 .Include(o => o.Shop)
                 .Include(o => o.Items)!
@@ -223,12 +223,12 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .GroupBy(o => o.ShopId)
                 .Select(g => new
                 {
-                    ShopId   = g.Key,
+                    ShopId = g.Key,
                     ShopName = g.Where(o => o.Shop != null)
                                  .Select(o => o.Shop!.Name)
                                  .FirstOrDefault() ?? "Unknown",
                     OrderCount = g.Count(),
-                    Revenue    = g.Sum(o => o.TotalAmount)
+                    Revenue = g.Sum(o => o.TotalAmount)
                 })
                 .OrderByDescending(x => x.OrderCount)
                 .Take(top)
@@ -248,12 +248,12 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .GroupBy(o => o.CustomerId)
                 .Select(g => new
                 {
-                    CustomerId   = g.Key,
+                    CustomerId = g.Key,
                     CustomerName = g.Where(o => o.Customer != null)
                                      .Select(o => o.Customer!.UserName)
                                      .FirstOrDefault() ?? "Unknown",
-                    OrderCount   = g.Count(),
-                    TotalSpent   = g.Sum(o => o.TotalAmount)
+                    OrderCount = g.Count(),
+                    TotalSpent = g.Sum(o => o.TotalAmount)
                 })
                 .OrderByDescending(x => x.TotalSpent)
                 .Take(top)
@@ -277,7 +277,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             // ✅ Không tự động save - để UnitOfWork quản lý
             await Task.CompletedTask;
         }
-        
+
         // ✅ New: Create order with transaction support
         public async Task<Order> CreateOrderWithTransactionAsync(Order order, Func<Task>? beforeSave = null)
         {
@@ -285,13 +285,13 @@ namespace eCommerceApp.Infrastructure.Repositories
             try
             {
                 await _context.Orders.AddAsync(order);
-                
+
                 // Execute beforeSave callback if provided (e.g., reduce stock)
                 if (beforeSave != null)
                 {
                     await beforeSave();
                 }
-                
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
                 return order;
@@ -302,7 +302,7 @@ namespace eCommerceApp.Infrastructure.Repositories
                 throw;
             }
         }
-        
+
         // ✅ New: Get unpaid orders older than specified time (for auto-cancellation)
         public async Task<IEnumerable<Order>> GetUnpaidOrdersOlderThanAsync(TimeSpan olderThan, PaymentMethod? excludePaymentMethod = null)
         {
@@ -311,12 +311,12 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .Where(o => o.Status == OrderStatus.Pending
                     && o.PaymentStatus == PaymentStatus.Pending
                     && o.CreatedAt < cutoffTime);
-        
+
             if (excludePaymentMethod.HasValue)
             {
                 query = query.Where(o => o.PaymentMethod != excludePaymentMethod.Value);
             }
-        
+
             return await query
                 .Include(o => o.Items)! // giữ null-forgiving cho collection
                     .ThenInclude(oi => oi.Product)

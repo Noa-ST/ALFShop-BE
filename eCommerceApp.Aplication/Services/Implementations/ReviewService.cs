@@ -38,12 +38,25 @@ namespace eCommerceApp.Aplication.Services.Implementations
             if (product == null)
                 return ServiceResponse.Fail("Sản phẩm không tồn tại.", HttpStatusCode.NotFound);
 
+            // ✅ Debug logging
+            Console.WriteLine($"[DEBUG Review] userId={userId}, productId={dto.ProductId}");
+
             // ✅ Verified purchase: chỉ cho phép review nếu đã mua và đơn hàng đã Delivered & Paid
             var userOrders = await _uow.Orders.GetOrdersByCustomerIdAsync(userId);
+            var ordersList = userOrders.ToList();
+            Console.WriteLine($"[DEBUG Review] userOrders count={ordersList.Count}");
+            foreach (var order in ordersList)
+            {
+                var hasProduct = order.Items.Any(i => i.ProductId == dto.ProductId);
+                Console.WriteLine($"[DEBUG Review] order={order.Id}, status={order.Status}, paymentStatus={order.PaymentStatus}, hasProduct={hasProduct}");
+            }
+
             var isVerifiedPurchase = userOrders.Any(o =>
                 o.Status == OrderStatus.Delivered &&
                 o.PaymentStatus == PaymentStatus.Paid &&
                 o.Items.Any(i => i.ProductId == dto.ProductId));
+
+            Console.WriteLine($"[DEBUG Review] isVerifiedPurchase={isVerifiedPurchase}");
 
             if (!isVerifiedPurchase)
                 return ServiceResponse.Fail("Chỉ khách đã mua và nhận hàng mới được đánh giá.", HttpStatusCode.Forbidden);
