@@ -31,6 +31,7 @@ namespace eCommerceApp.Infrastructure.Repositories
         {
             var query = _context.Reviews
                 .Include(r => r.User)
+                .Include(r => r.Product)
                 .Where(r => r.ProductId == productId && !r.IsDeleted);
 
             if (onlyApproved)
@@ -50,6 +51,7 @@ namespace eCommerceApp.Infrastructure.Repositories
         {
             var query = _context.Reviews
                 .Include(r => r.User)
+                .Include(r => r.Product)
                 .Where(r => r.Status == ReviewStatus.Pending && !r.IsDeleted);
 
             var total = await query.CountAsync();

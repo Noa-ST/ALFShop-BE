@@ -42,7 +42,9 @@ namespace eCommerceApp.Aplication.Mapping
 
             // (Đã bỏ CreateMap<Review, GetReview> trùng)
             // (Đã khai báo trong MappingConfig)
-            CreateMap<Review, eCommerceApp.Aplication.DTOs.Review.GetReview>();
+            CreateMap<Review, eCommerceApp.Aplication.DTOs.Review.GetReview>()
+                .ForMember(dest => dest.ProductName, opt => opt.MapFrom(src => src.Product != null ? src.Product.Name : "N/A"))
+                .ForMember(dest => dest.UserFullName, opt => opt.MapFrom(src => src.User != null ? src.User.FullName : "N/A"));
         }
     }
 }
