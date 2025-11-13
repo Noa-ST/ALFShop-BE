@@ -46,6 +46,17 @@ namespace eCommerceApp.Host.Controllers
             return Ok(new { hasReviewed = review != null, review });
         }
 
+        // Admin: lấy danh sách review chưa duyệt
+        [HttpGet("/api/Admin/reviews/pending")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(typeof(PagedResult<GetReview>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> GetPending([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var result = await _reviewService.GetPendingAsync(page, pageSize);
+            return Ok(result);
+        }
+
         // Tạo review mới (yêu cầu đăng nhập)
         [HttpPost]
         [Authorize]
@@ -56,7 +67,18 @@ namespace eCommerceApp.Host.Controllers
         public async Task<IActionResult> Create([FromBody] CreateReview dto)
         {
             if (!ModelState.IsValid)
+            {
+                Console.WriteLine($"[Review Create] ModelState Invalid. Errors:");
+                foreach (var entry in ModelState.Values)
+                {
+                    foreach (var error in entry.Errors)
+                    {
+                        Console.WriteLine($"  - {error.ErrorMessage}");
+                    }
+                }
+                Console.WriteLine($"[Review Create] DTO received: ProductId={dto?.ProductId}, Rating={dto?.Rating}, Comment={dto?.Comment}");
                 return BadRequest(ModelState);
+            }
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId))

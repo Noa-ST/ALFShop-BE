@@ -46,6 +46,22 @@ namespace eCommerceApp.Infrastructure.Repositories
             return (items, total);
         }
 
+        public async Task<(IEnumerable<Review> Reviews, int TotalCount)> GetPendingAsync(int page, int pageSize)
+        {
+            var query = _context.Reviews
+                .Include(r => r.User)
+                .Where(r => r.Status == ReviewStatus.Pending && !r.IsDeleted);
+
+            var total = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(r => r.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return (items, total);
+        }
+
         public async Task<int> ApproveAsync(Guid id, string adminId)
         {
             var review = await _context.Reviews.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);

@@ -136,6 +136,24 @@ namespace eCommerceApp.Aplication.Services.Implementations
             return _mapper.Map<GetReview>(review);
         }
 
+        public async Task<PagedResult<GetReview>> GetPendingAsync(int page = 1, int pageSize = 20)
+        {
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var (items, total) = await _uow.Reviews.GetPendingAsync(page, pageSize);
+            var dtos = _mapper.Map<IEnumerable<GetReview>>(items);
+
+            return new PagedResult<GetReview>
+            {
+                Data = dtos.ToList(),
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
         public async Task<ServiceResponse> ApproveAsync(Guid id, string adminId)
         {
             var review = await _uow.Reviews.GetByIdAsync(id);
