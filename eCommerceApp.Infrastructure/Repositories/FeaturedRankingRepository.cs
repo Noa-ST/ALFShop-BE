@@ -31,8 +31,8 @@ namespace eCommerceApp.Infrastructure.Repositories
 
         public async Task<List<FeaturedRanking>> GetLatestScoresAsync(string entityType, int limit = 20)
         {
-            // Take the latest ranking per entity by max ComputedAt
-            var latestPerEntity = await context.FeaturedRankings
+            // Lấy bản ghi xếp hạng mới nhất cho mỗi entity (max ComputedAt)
+            var latestPerEntity = await _context.FeaturedRankings
                 .AsNoTracking()
                 .Where(r => !r.IsDeleted && r.EntityType == entityType)
                 .GroupBy(r => r.EntityId)
@@ -41,7 +41,8 @@ namespace eCommerceApp.Infrastructure.Repositories
                 .Take(limit)
                 .ToListAsync();
 
-            return latestPerEntity;
+            // Đảm bảo trả về List không-null (khắc phục CS8619)
+            return latestPerEntity ?? new List<FeaturedRanking>();
         }
     }
 }

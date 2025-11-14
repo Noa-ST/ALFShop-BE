@@ -5,17 +5,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace eCommerceApp.Infrastructure.Repositories
 {
-    public class FeaturedEventRepository(AppDbContext context) : GenericRepository<FeaturedEvent>(context), IFeaturedEventRepository
+    public class FeaturedEventRepository : GenericRepository<FeaturedEvent>, IFeaturedEventRepository
     {
+        private readonly AppDbContext _context;
+
+        public FeaturedEventRepository(AppDbContext context) : base(context)
+        {
+            _context = context;
+        }
+
         public async Task<int> AddEventAsync(FeaturedEvent ev)
         {
-            await context.FeaturedEvents.AddAsync(ev);
+            await _context.FeaturedEvents.AddAsync(ev);
             return 1;
         }
 
         public async Task<(int Clicks, int Impressions, int AddsToCart)> GetTotalsAsync(string? entityType = null, DateTime? from = null, DateTime? to = null)
         {
-            var query = context.FeaturedEvents.AsNoTracking().Where(e => !e.IsDeleted);
+            var query = _context.FeaturedEvents.AsNoTracking().Where(e => !e.IsDeleted);
             if (!string.IsNullOrWhiteSpace(entityType))
                 query = query.Where(e => e.EntityType == entityType);
             if (from.HasValue)
@@ -35,7 +42,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             DateTime? to,
             int topN = 10)
         {
-            var query = context.FeaturedEvents.AsNoTracking().Where(e => !e.IsDeleted && e.EntityType == entityType);
+            var query = _context.FeaturedEvents.AsNoTracking().Where(e => !e.IsDeleted && e.EntityType == entityType);
             if (from.HasValue)
                 query = query.Where(e => e.CreatedAt >= from.Value);
             if (to.HasValue)
@@ -63,7 +70,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             DateTime? from = null,
             DateTime? to = null)
         {
-            var query = context.FeaturedEvents.AsNoTracking()
+            var query = _context.FeaturedEvents.AsNoTracking()
                 .Where(e => !e.IsDeleted && e.EntityType == entityType && e.EntityId == entityId);
             if (from.HasValue)
                 query = query.Where(e => e.CreatedAt >= from.Value);
@@ -83,7 +90,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             int page = 1,
             int pageSize = 10)
         {
-            var query = context.FeaturedEvents.AsNoTracking().Where(e => !e.IsDeleted && e.EntityType == entityType);
+            var query = _context.FeaturedEvents.AsNoTracking().Where(e => !e.IsDeleted && e.EntityType == entityType);
             if (from.HasValue)
                 query = query.Where(e => e.CreatedAt >= from.Value);
             if (to.HasValue)

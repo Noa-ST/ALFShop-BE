@@ -120,9 +120,10 @@ namespace eCommerceApp.Infrastructure.DependencyInjection
             services.AddScoped<IUnitOfWork, UnitOfWork>();
 
             // ✅ New: Register Image Storage (Cloudinary)
-            services.AddSingleton<IImageStorageService, CloudinaryImageStorageService>();
+            // Fix lifetime: this service depends on scoped IAppLogger and env/config; use Scoped
+            services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
 
-            // ✅ Register Background Services
+    
             services.AddHostedService<RefreshTokenCleanupService>();
             services.AddHostedService<PaymentLinkExpirationService>(); // ✅ New: Auto-expire payment links
             services.AddHostedService<OrderExpirationService>(); // ✅ New: Auto-cancel unpaid orders

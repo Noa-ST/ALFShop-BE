@@ -16,9 +16,9 @@ namespace eCommerceApp.Infrastructure.Repositories
 
         public override async Task<Review?> GetByIdAsync(Guid id)
         {
-            return await _context.Reviews
-                .Include(r => r.User)
-                .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+       return await _context.Reviews
+        .Include(r => r.User)
+        .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         }
 
         public async Task<Review?> GetUserReviewForProductAsync(Guid productId, string userId)

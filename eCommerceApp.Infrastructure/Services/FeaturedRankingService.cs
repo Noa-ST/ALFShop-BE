@@ -2,19 +2,20 @@ using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Interfaces;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace eCommerceApp.Infrastructure.Services
 {
     public class FeaturedRankingService : BackgroundService
     {
         private readonly ILogger<FeaturedRankingService> _logger;
-        private readonly IUnitOfWork _uow;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly TimeSpan _interval;
 
-        public FeaturedRankingService(ILogger<FeaturedRankingService> logger, IUnitOfWork uow)
+        public FeaturedRankingService(ILogger<FeaturedRankingService> logger, IServiceScopeFactory scopeFactory)
         {
             _logger = logger;
-            _uow = uow;
+            _scopeFactory = scopeFactory;
             _interval = TimeSpan.FromMinutes(30);
         }
 
@@ -49,9 +50,12 @@ namespace eCommerceApp.Infrastructure.Services
         {
             try
             {
-                await ComputeProductRankingsAsync(ct);
-                await ComputeShopRankingsAsync(ct);
-                await ComputeCategoryRankingsAsync(ct);
+                using var scope = _scopeFactory.CreateScope();
+                var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+                await ComputeProductRankingsAsync(uow, ct);
+                await ComputeShopRankingsAsync(uow, ct);
+                await ComputeCategoryRankingsAsync(uow, ct);
             }
             catch (Exception ex)
             {
@@ -59,7 +63,7 @@ namespace eCommerceApp.Infrastructure.Services
             }
         }
 
-        private async Task ComputeProductRankingsAsync(CancellationToken ct)
+        private async Task ComputeProductRankingsAsync(IUnitOfWork _uow, CancellationToken ct)
         {
             var now = DateTime.UtcNow;
             var products = await _uow.Products.GetAllAsync();
@@ -94,7 +98,7 @@ namespace eCommerceApp.Infrastructure.Services
             _logger.LogInformation("Computed {Count} product rankings.", products.Count());
         }
 
-        private async Task ComputeShopRankingsAsync(CancellationToken ct)
+        private async Task ComputeShopRankingsAsync(IUnitOfWork _uow, CancellationToken ct)
         {
             var now = DateTime.UtcNow;
             var shops = await _uow.Shops.GetAllAsync();
@@ -128,7 +132,7 @@ namespace eCommerceApp.Infrastructure.Services
             _logger.LogInformation("Computed {Count} shop rankings.", shops.Count());
         }
 
-        private async Task ComputeCategoryRankingsAsync(CancellationToken ct)
+        private async Task ComputeCategoryRankingsAsync(IUnitOfWork _uow, CancellationToken ct)
         {
             var now = DateTime.UtcNow;
             var categories = await _uow.GlobalCategories.GetAllAsync();
