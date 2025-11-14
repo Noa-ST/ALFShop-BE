@@ -81,7 +81,8 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod()
               .WithOrigins(
                   "http://localhost:5173",
-                  "https://localhost:5173"
+                  "https://localhost:5173",
+                  "https://aifshop-web.onrender.com"
               )
               .AllowCredentials();
     });
