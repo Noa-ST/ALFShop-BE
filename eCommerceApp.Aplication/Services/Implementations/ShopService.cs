@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using System.Linq;
 using System.Net;
+using System.Net.Http; // NEW
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -19,19 +20,24 @@ namespace eCommerceApp.Aplication.Services.Implementations
         private readonly UserManager<User> _userManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IImageStorageService _imageStorage; // NEW
+        private readonly HttpClient _httpClient = new HttpClient(); // NEW
 
         public ShopService(
             IShopRepository shopRepository, 
             IMapper mapper,
             UserManager<User> userManager,
             IHttpContextAccessor httpContextAccessor,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork,
+            IImageStorageService imageStorage // NEW
+        )
         {
             _shopRepository = shopRepository;
             _mapper = mapper;
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
             _unitOfWork = unitOfWork;
+            _imageStorage = imageStorage; // NEW
         }
 
         public async Task<ServiceResponse> CreateAsync(CreateShop shop)
@@ -79,12 +85,38 @@ namespace eCommerceApp.Aplication.Services.Implementations
             mappedData.UpdatedAt = null;
             mappedData.IsDeleted = false;
 
-            // Thêm vào DB
+            // NEW: xử lý logo → luôn upload Cloudinary
+            if (!string.IsNullOrWhiteSpace(shop.Logo))
+            {
+                try
+                {
+                    var input = shop.Logo.Trim();
+                    bool isHttp = input.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                                  || input.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+                    string finalUrl;
+                    if (isHttp)
+                    {
+                        var bytes = await _httpClient.GetByteArrayAsync(input);
+                        var base64 = Convert.ToBase64String(bytes);
+                        var dataUrl = $"data:image/*;base64,{base64}";
+                        finalUrl = await _imageStorage.UploadBase64Async(dataUrl, "uploads/shops");
+                    }
+                    else
+                    {
+                        finalUrl = await _imageStorage.UploadBase64Async(input, "uploads/shops");
+                    }
+
+                    mappedData.Logo = finalUrl;
+                }
+                catch (Exception ex)
+                {
+                    return ServiceResponse.Fail($"Upload logo lên Cloudinary thất bại: {ex.Message}", HttpStatusCode.BadRequest);
+                }
+            }
+
             await _shopRepository.AddAsync(mappedData);
-            
-            // ✅ Fix: Lưu vào database
             int saved = await _unitOfWork.SaveChangesAsync();
-            
             return saved > 0
                 ? ServiceResponse.Success("Shop created successfully.")
                 : ServiceResponse.Fail("Failed to create shop.", HttpStatusCode.InternalServerError);
@@ -115,11 +147,38 @@ namespace eCommerceApp.Aplication.Services.Implementations
             _mapper.Map(shop, existing);
             existing.UpdatedAt = DateTime.UtcNow;
 
+            // NEW: xử lý logo → luôn upload Cloudinary nếu có giá trị mới
+            if (!string.IsNullOrWhiteSpace(shop.Logo))
+            {
+                try
+                {
+                    var input = shop.Logo.Trim();
+                    bool isHttp = input.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                                  || input.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+                    string finalUrl;
+                    if (isHttp)
+                    {
+                        var bytes = await _httpClient.GetByteArrayAsync(input);
+                        var base64 = Convert.ToBase64String(bytes);
+                        var dataUrl = $"data:image/*;base64,{base64}";
+                        finalUrl = await _imageStorage.UploadBase64Async(dataUrl, "uploads/shops");
+                    }
+                    else
+                    {
+                        finalUrl = await _imageStorage.UploadBase64Async(input, "uploads/shops");
+                    }
+
+                    existing.Logo = finalUrl;
+                }
+                catch (Exception ex)
+                {
+                    return ServiceResponse.Fail($"Upload logo lên Cloudinary thất bại: {ex.Message}", HttpStatusCode.BadRequest);
+                }
+            }
+
             await _shopRepository.UpdateAsync(existing);
-            
-            // ✅ Fix: Lưu vào database
             int saved = await _unitOfWork.SaveChangesAsync();
-            
             return saved > 0
                 ? ServiceResponse.Success("Shop updated successfully.")
                 : ServiceResponse.Fail("Failed to update shop.", HttpStatusCode.InternalServerError);

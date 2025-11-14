@@ -6,10 +6,10 @@ using eCommerceApp.Domain.Entities;
 using eCommerceApp.Domain.Enums;
 using eCommerceApp.Domain.Interfaces;
 using System.Net;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
+using System.Net.Http;
 
 namespace eCommerceApp.Aplication.Services.Implementations
 {
@@ -18,10 +18,11 @@ namespace eCommerceApp.Aplication.Services.Implementations
         IMapper mapper
         , IShopRepository shopRepository
         , IGlobalCategoryRepository globalCategoryRepository
-        , IWebHostEnvironment webHostEnvironment
         , IHttpContextAccessor httpContextAccessor
+        , IImageStorageService imageStorage // NEW: sử dụng Cloudinary thông qua abstraction
     ) : IProductService
     {
+        private readonly HttpClient _httpClient = new HttpClient();
         public async Task<ServiceResponse> RejectProductAsync(Guid productId, string? rejectionReason)
         {
             var product = await productRepo.GetByIdAsync(productId);
@@ -122,7 +123,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 // ✅ Khai báo outputImages ngoài để sử dụng sau
                 List<ProductImage> outputImages = new List<ProductImage>();
 
-                // ✅ Xử lý ảnh: chấp nhận URL hoặc Base64. Nếu base64 -> lưu file về wwwroot/uploads/products
+                // ✅ Xử lý ảnh: chuẩn hoá sang Cloudinary (100%)
                 if (product.ImageUrls != null && product.ImageUrls.Any())
                 {
                     var distinctInputs = product.ImageUrls
@@ -130,18 +131,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         .Select(u => u.Trim())
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
-
-                    var usedIds = new HashSet<Guid>(); // ✅ Track các Id đã sử dụng để tránh duplicate
-
-                    // ✅ Dùng IWebHostEnvironment để lấy đường dẫn wwwroot chính xác
-                    string webRoot = webHostEnvironment.WebRootPath;
-                    if (string.IsNullOrEmpty(webRoot))
-                    {
-                        webRoot = Path.Combine(webHostEnvironment.ContentRootPath, "wwwroot");
-                    }
-
-                    string uploadRoot = Path.Combine(webRoot, "uploads", "products");
-                    Directory.CreateDirectory(uploadRoot);
 
                     foreach (var input in distinctInputs)
                     {
@@ -151,90 +140,38 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
                             bool isHttp = input.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                                           || input.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-                            bool isDataUrl = input.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
-                                             && input.Contains(";base64,");
 
                             if (isHttp)
                             {
-                                finalUrl = input; // giữ nguyên URL
+                                // Tải dữ liệu từ URL và re-upload lên Cloudinary
+                                var bytes = await _httpClient.GetByteArrayAsync(input);
+                                var base64 = Convert.ToBase64String(bytes);
+                                var dataUrl = $"data:image/*;base64,{base64}";
+                                finalUrl = await imageStorage.UploadBase64Async(dataUrl, "uploads/products");
                             }
                             else
                             {
-                                // Xử lý chuỗi base64 (có thể ở dạng data URL hoặc chỉ raw base64)
-                                string base64Part = input;
-                                string extension = "jpg"; // mặc định an toàn
-
-                                if (isDataUrl)
-                                {
-                                    // data:image/png;base64,XXXXX
-                                    var headerEnd = input.IndexOf(",");
-                                    if (headerEnd < 0)
-                                    {
-                                        // Skip ảnh không hợp lệ
-                                        continue;
-                                    }
-                                    var header = input.Substring(0, headerEnd);
-                                    base64Part = input[(headerEnd + 1)..];
-                                    if (header.Contains("image/png", StringComparison.OrdinalIgnoreCase)) extension = "png";
-                                    else if (header.Contains("image/jpeg", StringComparison.OrdinalIgnoreCase) || header.Contains("image/jpg", StringComparison.OrdinalIgnoreCase)) extension = "jpg";
-                                    else if (header.Contains("image/webp", StringComparison.OrdinalIgnoreCase)) extension = "webp";
-                                }
-
-                                // Tạo tên file
-                                string fileName = $"{Guid.NewGuid():N}.{extension}";
-                                string filePath = Path.Combine(uploadRoot, fileName);
-
-                                // Ghi file với error handling
-                                try
-                                {
-                                    byte[] imageBytes = Convert.FromBase64String(base64Part);
-                                    if (imageBytes == null || imageBytes.Length == 0)
-                                    {
-                                        continue; // Skip ảnh không hợp lệ
-                                    }
-                                    await File.WriteAllBytesAsync(filePath, imageBytes);
-
-                                    // URL tương đối để client truy cập qua static files
-                                    finalUrl = $"/uploads/products/{fileName}";
-                                }
-                                catch (FormatException)
-                                {
-                                    // Base64 không hợp lệ, skip ảnh này
-                                    continue;
-                                }
-                                catch (Exception)
-                                {
-                                    // Log lỗi nhưng tiếp tục với ảnh khác
-                                    continue;
-                                }
+                                // Base64 hoặc data URL → upload lên Cloudinary
+                                finalUrl = await imageStorage.UploadBase64Async(input, "uploads/products");
                             }
-
-                            // ✅ Tạo Id duy nhất (đảm bảo không trùng)
-                            Guid imageId;
-                            do
-                            {
-                                imageId = Guid.NewGuid();
-                            } while (usedIds.Contains(imageId));
-
-                            usedIds.Add(imageId);
 
                             outputImages.Add(new ProductImage
                             {
-                                Id = imageId, // ✅ Id duy nhất đã được đảm bảo
+                                Id = Guid.NewGuid(),
                                 Url = finalUrl,
                                 CreatedAt = DateTime.UtcNow,
                                 IsDeleted = false
                             });
                         }
-                        catch (Exception)
+                        catch
                         {
-                            // Log nhưng tiếp tục xử lý ảnh tiếp theo để không block các ảnh khác
+                            // Skip ảnh lỗi, tiếp tục ảnh khác
                             continue;
                         }
                     }
-
-                    // ✅ Images đã được thêm vào outputImages, không set trên entity để tránh tracking conflicts
                 }
+
+                // ✅ Images đã được thêm vào outputImages, không set trên entity để tránh tracking conflicts
 
                 // ✅ Gọi repo lưu 1 lần duy nhất, truyền images riêng
                 // Log số lượng ảnh để debug
@@ -294,7 +231,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
             // ✅ Fix: Sử dụng repository method để đảm bảo atomicity khi update images
             try
             {
-                // Prepare new images if provided (process data URLs => save files, keep http/relative as-is)
                 IEnumerable<ProductImage>? newImages = null;
                 if (product.ImageUrls != null && product.ImageUrls.Any())
                 {
@@ -304,17 +240,7 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
-                    // Use IWebHostEnvironment to compute wwwroot
-                    string webRoot = webHostEnvironment.WebRootPath;
-                    if (string.IsNullOrEmpty(webRoot))
-                    {
-                        webRoot = Path.Combine(webHostEnvironment.ContentRootPath, "wwwroot");
-                    }
-                    string uploadRoot = Path.Combine(webRoot, "uploads", "products");
-                    Directory.CreateDirectory(uploadRoot);
-
                     var imgs = new List<ProductImage>();
-                    var usedIds = new HashSet<Guid>();
 
                     foreach (var input in distinctInputs)
                     {
@@ -324,73 +250,23 @@ namespace eCommerceApp.Aplication.Services.Implementations
 
                             bool isHttp = input.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                                           || input.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-                            bool isDataUrl = input.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
-                                             && input.Contains(";base64,");
 
                             if (isHttp)
                             {
-                                finalUrl = input; // keep full URL
+                                // Tải dữ liệu từ URL và re-upload lên Cloudinary
+                                var bytes = await _httpClient.GetByteArrayAsync(input);
+                                var base64 = Convert.ToBase64String(bytes);
+                                var dataUrl = $"data:image/*;base64,{base64}";
+                                finalUrl = await imageStorage.UploadBase64Async(dataUrl, "uploads/products");
                             }
                             else
                             {
-                                // handle data URL or raw base64
-                                string base64Part = input;
-                                string extension = "jpg";
-
-                                if (isDataUrl)
-                                {
-                                    var headerEnd = input.IndexOf(",");
-                                    if (headerEnd < 0) continue;
-                                    var header = input.Substring(0, headerEnd);
-                                    base64Part = input[(headerEnd + 1)..];
-                                    if (header.Contains("image/png", StringComparison.OrdinalIgnoreCase)) extension = "png";
-                                    else if (header.Contains("image/jpeg", StringComparison.OrdinalIgnoreCase) || header.Contains("image/jpg", StringComparison.OrdinalIgnoreCase)) extension = "jpg";
-                                    else if (header.Contains("image/webp", StringComparison.OrdinalIgnoreCase)) extension = "webp";
-                                }
-
-                                // If input looks like a relative path already (starts with "/") keep it
-                                if (!isDataUrl && input.StartsWith("/"))
-                                {
-                                    finalUrl = input;
-                                }
-                                else if (!isDataUrl && !isHttp && !input.StartsWith("/"))
-                                {
-                                    // treat as filename or relative path
-                                    finalUrl = input;
-                                }
-                                else
-                                {
-                                    // Save base64 to file
-                                    var fileName = $"{Guid.NewGuid():N}.{extension}";
-                                    var filePath = Path.Combine(uploadRoot, fileName);
-                                    try
-                                    {
-                                        byte[] imageBytes = Convert.FromBase64String(base64Part);
-                                        if (imageBytes == null || imageBytes.Length == 0) continue;
-                                        await File.WriteAllBytesAsync(filePath, imageBytes);
-                                        finalUrl = $"/uploads/products/{fileName}";
-                                    }
-                                    catch (FormatException)
-                                    {
-                                        // invalid base64
-                                        continue;
-                                    }
-                                    catch
-                                    {
-                                        continue;
-                                    }
-                                }
-
+                                finalUrl = await imageStorage.UploadBase64Async(input, "uploads/products");
                             }
-
-                            // assign unique id
-                            Guid imageId;
-                            do { imageId = Guid.NewGuid(); } while (usedIds.Contains(imageId));
-                            usedIds.Add(imageId);
 
                             imgs.Add(new ProductImage
                             {
-                                Id = imageId,
+                                Id = Guid.NewGuid(),
                                 ProductId = existing.Id,
                                 Url = finalUrl,
                                 CreatedAt = DateTime.UtcNow,
@@ -399,7 +275,6 @@ namespace eCommerceApp.Aplication.Services.Implementations
                         }
                         catch
                         {
-                            // skip problematic image
                             continue;
                         }
                     }
