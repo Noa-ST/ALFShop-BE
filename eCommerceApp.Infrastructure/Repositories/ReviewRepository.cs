@@ -14,7 +14,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             _context = context;
         }
 
-        public async Task<Review?> GetByIdAsync(Guid id)
+        public override async Task<Review?> GetByIdAsync(Guid id)
         {
             return await _context.Reviews
                 .Include(r => r.User)

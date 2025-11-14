@@ -106,7 +106,7 @@ try
     // Bật Swagger cả Production nếu muốn healthCheckPath = /swagger
     app.UseSwagger();
     app.UseSwaggerUI();
-    app.UseCors(AllowFrontend);
+    app.UseCors("AllowFrontend");
     app.UseSerilogRequestLogging();
 
     if (app.Environment.IsDevelopment())

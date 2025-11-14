@@ -41,9 +41,9 @@ namespace eCommerceApp.Aplication.Services.Implementations
             if (!string.IsNullOrEmpty(search))
             {
                 query = query.Where(u =>
-                    u.Email.Contains(search) ||
-                    u.FullName.Contains(search) ||
-                    u.UserName.Contains(search));
+                    (u.Email ?? "").Contains(search) ||
+                    (u.FullName ?? "").Contains(search) ||
+                    (u.UserName ?? "").Contains(search));
             }
 
             var total = query.Count();

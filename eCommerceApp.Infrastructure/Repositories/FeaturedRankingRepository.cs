@@ -5,17 +5,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace eCommerceApp.Infrastructure.Repositories
 {
-    public class FeaturedRankingRepository(AppDbContext context) : GenericRepository<FeaturedRanking>(context), IFeaturedRankingRepository
+    public class FeaturedRankingRepository : GenericRepository<FeaturedRanking>, IFeaturedRankingRepository
     {
+        private readonly AppDbContext _context;
+
+        public FeaturedRankingRepository(AppDbContext context) : base(context)
+        {
+            _context = context;
+        }
+
         public async Task<int> AddRankingAsync(FeaturedRanking ranking)
         {
-            await context.FeaturedRankings.AddAsync(ranking);
+            await _context.FeaturedRankings.AddAsync(ranking);
             return 1;
         }
 
         public async Task<FeaturedRanking?> GetLatestByEntityAsync(string entityType, Guid entityId)
         {
-            return await context.FeaturedRankings
+            return await _context.FeaturedRankings
                 .AsNoTracking()
                 .Where(r => !r.IsDeleted && r.EntityType == entityType && r.EntityId == entityId)
                 .OrderByDescending(r => r.ComputedAt)
