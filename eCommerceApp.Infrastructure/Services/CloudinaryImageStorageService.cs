@@ -40,16 +40,23 @@ namespace eCommerceApp.Infrastructure.Services
                 data = base64.Substring(commaIndex + 1);
             }
 
+            string mime = "image/png";
+            if (base64.StartsWith("data:image/jpeg")) mime = "image/jpeg";
+            if (base64.StartsWith("data:image/jpg"))  mime = "image/jpg";
+            if (base64.StartsWith("data:image/png"))  mime = "image/png";
+
             var endpointBase = $"https://api.cloudinary.com/v1_1/{_cloudName}/image/upload";
             var targetFolder = string.IsNullOrWhiteSpace(folder) ? _defaultFolder : folder;
 
-            _logger.LogInformation($"Cloudinary upload: endpoint={endpointBase}, preset={_uploadPreset}, folder={(string.IsNullOrWhiteSpace(targetFolder) ? "(none)" : targetFolder)}, dataLen={(data?.Length ?? 0)}");
+            var safeBaseName = $"img_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+            _logger.LogInformation($"Cloudinary upload: endpoint={endpointBase}, preset={_uploadPreset}, folder={(string.IsNullOrWhiteSpace(targetFolder) ? "(none)" : targetFolder)}, publicId={safeBaseName}, dataLen={(data?.Length ?? 0)}");
 
-            // Lần 1: dùng application/x-www-form-urlencoded
             var values = new List<KeyValuePair<string, string>>
             {
-                new("file", $"data:image/*;base64,{data}"),
-                new("upload_preset", _uploadPreset)
+                new("file", $"data:{mime};base64,{data}"),
+                new("upload_preset", _uploadPreset),
+                new("public_id", safeBaseName),
+                new("filename_override", safeBaseName)
             };
             if (!string.IsNullOrWhiteSpace(targetFolder))
             {
@@ -60,7 +67,6 @@ namespace eCommerceApp.Infrastructure.Services
             var resp = await _httpClient.PostAsync(endpointBase, formUrlEncoded, cancellationToken);
             var content = await resp.Content.ReadAsStringAsync(cancellationToken);
 
-            // Nếu fail vì Cloudinary không thấy upload_preset, thử fallback: gửi upload_preset trên query string
             if (!resp.IsSuccessStatusCode && content.Contains("Upload preset must be specified", StringComparison.OrdinalIgnoreCase))
             {
                 var endpointWithQuery = $"{endpointBase}?upload_preset={Uri.EscapeDataString(_uploadPreset)}";
@@ -68,7 +74,9 @@ namespace eCommerceApp.Infrastructure.Services
 
                 var retryValues = new List<KeyValuePair<string, string>>
                 {
-                    new("file", $"data:image/*;base64,{data}")
+                    new("file", $"data:{mime};base64,{data}"),
+                    new("public_id", safeBaseName),
+                    new("filename_override", safeBaseName)
                 };
                 if (!string.IsNullOrWhiteSpace(targetFolder))
                 {
