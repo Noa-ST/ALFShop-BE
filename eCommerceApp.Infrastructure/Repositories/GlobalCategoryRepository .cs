@@ -51,6 +51,45 @@ namespace eCommerceApp.Infrastructure.Repositories
             return roots;
         }
 
+        // ✅ New: Get all descendant IDs (children, grandchildren, ...)
+        public async Task<List<Guid>> GetDescendantIdsAsync(Guid categoryId, bool includeSelf = false)
+        {
+            // Load only Id and ParentId for efficiency
+            var all = await _context.GlobalCategoris
+                .Where(c => !c.IsDeleted)
+                .Select(c => new { c.Id, c.ParentId })
+                .ToListAsync();
+
+            // Build lookup: parentId -> children Ids
+            var childrenLookup = all
+                .Where(c => c.ParentId.HasValue)
+                .GroupBy(c => c.ParentId!.Value)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
+
+            var result = new List<Guid>();
+            var stack = new Stack<Guid>();
+            stack.Push(categoryId);
+
+            // Optional: include self
+            if (includeSelf)
+                result.Add(categoryId);
+
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                if (!childrenLookup.TryGetValue(current, out var children) || children.Count == 0)
+                    continue;
+
+                foreach (var childId in children)
+                {
+                    result.Add(childId);
+                    stack.Push(childId);
+                }
+            }
+
+            return result;
+        }
+
         // ✅ New: Count children of a category
         public async Task<int> CountChildrenAsync(Guid parentId)
         {

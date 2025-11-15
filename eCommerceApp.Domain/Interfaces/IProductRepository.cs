@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Domain.Entities;
+using eCommerceApp.Domain.Entities;
 
 namespace eCommerceApp.Domain.Interfaces
 {
@@ -15,6 +15,7 @@ namespace eCommerceApp.Domain.Interfaces
             string? keyword,
             Guid? shopId,
             Guid? categoryId,
+            IEnumerable<Guid>? categoryIds,
             Domain.Enums.ProductStatus? status,
             decimal? minPrice,
             decimal? maxPrice,

@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Aplication.DTOs; 
+using eCommerceApp.Aplication.DTOs; 
 using eCommerceApp.Aplication.DTOs.GlobalCategory;
 
 namespace eCommerceApp.Aplication.Services.Interfaces
@@ -15,6 +15,9 @@ namespace eCommerceApp.Aplication.Services.Interfaces
         
         // ✅ New: Get categories by parent ID
         Task<ServiceResponse<IEnumerable<GetGlobalCategory>>> GetCategoriesByParentIdAsync(Guid? parentId);
+
+        // ✅ New: Get descendant IDs for a category
+        Task<ServiceResponse<IEnumerable<Guid>>> GetDescendantIdsAsync(Guid categoryId, bool includeSelf = false);
         
         // ✅ New: Statistics for Admin dashboard
         Task<ServiceResponse<object>> GetStatisticsAsync();

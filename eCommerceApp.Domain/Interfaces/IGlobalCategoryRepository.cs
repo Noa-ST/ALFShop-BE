@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Domain.Entities;
+using eCommerceApp.Domain.Entities;
 
 namespace eCommerceApp.Domain.Interfaces
 {
@@ -8,6 +8,9 @@ namespace eCommerceApp.Domain.Interfaces
         Task<int> CountChildrenAsync(Guid parentId);
         Task<bool> HasCircularReferenceAsync(Guid categoryId, Guid? newParentId);
         Task<GlobalCategory?> GetByIdWithChildrenAsync(Guid id);
+        
+        // ✅ New: Get all descendant IDs for a given category
+        Task<List<Guid>> GetDescendantIdsAsync(Guid categoryId, bool includeSelf = false);
         
         // ✅ New: Check duplicate name in same level
         Task<bool> ExistsByNameInSameLevelAsync(string name, Guid? parentId, Guid? excludeId = null);

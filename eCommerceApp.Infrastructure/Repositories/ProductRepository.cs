@@ -154,6 +154,7 @@ namespace eCommerceApp.Infrastructure.Repositories
             string? keyword,
             Guid? shopId,
             Guid? categoryId,
+            IEnumerable<Guid>? categoryIds,
             Domain.Enums.ProductStatus? status,
             decimal? minPrice,
             decimal? maxPrice,
@@ -181,8 +182,15 @@ namespace eCommerceApp.Infrastructure.Repositories
             if (shopId.HasValue)
                 query = query.Where(p => p.ShopId == shopId.Value);
 
-            if (categoryId.HasValue)
+            // Lọc theo danh sách categoryIds nếu có, ngược lại dùng categoryId đơn
+            if (categoryIds != null && categoryIds.Any())
+            {
+                query = query.Where(p => categoryIds.Contains(p.GlobalCategoryId));
+            }
+            else if (categoryId.HasValue)
+            {
                 query = query.Where(p => p.GlobalCategoryId == categoryId.Value);
+            }
 
             if (status.HasValue)
                 query = query.Where(p => p.Status == status.Value);

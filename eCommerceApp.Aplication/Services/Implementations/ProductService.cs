@@ -454,11 +454,30 @@ namespace eCommerceApp.Aplication.Services.Implementations
                 filter.Status = ProductStatus.Approved; // Force Approved status for public users
             }
 
+            // ✅ New: Nếu chỉ có CategoryId (danh mục cha) được truyền vào,
+            // tự động mở rộng thành danh sách CategoryIds gồm chính nó + toàn bộ descendants
+            // để kết quả bao phủ sản phẩm thuộc các danh mục con.
+            if ((filter.CategoryIds == null || !filter.CategoryIds.Any()) && filter.CategoryId.HasValue)
+            {
+                var expanded = await globalCategoryRepository.GetDescendantIdsAsync(filter.CategoryId.Value, includeSelf: true);
+                // Nếu không có descendants thì danh sách vẫn chứa chính CategoryId (do includeSelf: true)
+                if (expanded != null && expanded.Any())
+                {
+                    filter.CategoryIds = expanded;
+                }
+                else
+                {
+                    // Fallback an toàn: đảm bảo ít nhất chứa chính CategoryId
+                    filter.CategoryIds = new List<Guid> { filter.CategoryId.Value };
+                }
+            }
+
             // Call repository
             var (products, totalCount) = await productRepo.SearchAndFilterAsync(
                 filter.Keyword,
                 filter.ShopId,
                 filter.CategoryId,
+                filter.CategoryIds,
                 filter.Status,
                 filter.MinPrice,
                 filter.MaxPrice,

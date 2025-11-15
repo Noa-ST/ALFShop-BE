@@ -18,6 +18,8 @@ namespace eCommerceApp.Aplication.DTOs.Product
         // Filters
         public Guid? ShopId { get; set; }
         public Guid? CategoryId { get; set; }
+        // ✅ New: Danh sách categoryIds để lọc theo nhiều danh mục (ví dụ descendants)
+        public IEnumerable<Guid>? CategoryIds { get; set; }
         public ProductStatus? Status { get; set; }
         public decimal? MinPrice { get; set; }
         public decimal? MaxPrice { get; set; }
@@ -40,6 +42,10 @@ namespace eCommerceApp.Aplication.DTOs.Product
 
             if (SortOrder.ToLower() != "asc" && SortOrder.ToLower() != "desc")
                 SortOrder = "desc";
+
+            // Chuẩn hóa CategoryIds: bỏ trùng
+            if (CategoryIds != null)
+                CategoryIds = CategoryIds.Distinct().ToList();
         }
     }
 }

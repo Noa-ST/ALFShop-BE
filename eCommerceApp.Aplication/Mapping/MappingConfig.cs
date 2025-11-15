@@ -1,4 +1,4 @@
-﻿// Class: MappingConfig (AutoMapper Profile)
+// Class: MappingConfig (AutoMapper Profile)
 using AutoMapper;
 using eCommerceApp.Aplication.DTOs.Identity;
 using eCommerceApp.Aplication.DTOs.Product;
@@ -108,8 +108,18 @@ namespace eCommerceApp.Aplication.Mapping
             CreateMap<UpdateProduct, Product>()
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.Images, opt => opt.Ignore())
-                .ForMember(dest => dest.Status, opt => opt.MapFrom(src =>
-                    src.Status.HasValue ? src.Status.Value : ProductStatus.Pending));
+                // ✅ Preserve existing Status if DTO.Status is null
+                .ForMember(dest => dest.Status, opt =>
+                {
+                    opt.Condition(src => src.Status.HasValue);
+                    opt.MapFrom(src => src.Status!.Value);
+                })
+                // ✅ Map CategoryId -> GlobalCategoryId only when provided (not Guid.Empty)
+                .ForMember(dest => dest.GlobalCategoryId, opt =>
+                {
+                    opt.Condition(src => src.CategoryId != Guid.Empty);
+                    opt.MapFrom(src => src.CategoryId);
+                });
 
             // ✅ Cập nhật: Product → GetProduct
             CreateMap<Product, GetProduct>()

@@ -255,6 +255,22 @@ namespace eCommerceApp.Aplication.Services.Implementations
             return ServiceResponse<IEnumerable<GetGlobalCategory>>.Success(categoryDtos);
         }
 
+        // ✅ New: Get descendant IDs for a category
+        public async Task<ServiceResponse<IEnumerable<Guid>>> GetDescendantIdsAsync(Guid categoryId, bool includeSelf = false)
+        {
+            // Validate category exists and is not deleted
+            var category = await _globalCategoryRepository.GetByIdAsync(categoryId);
+            if (category == null || category.IsDeleted)
+            {
+                return ServiceResponse<IEnumerable<Guid>>.Fail(
+                    "Không tìm thấy danh mục.",
+                    HttpStatusCode.NotFound);
+            }
+
+            var ids = await _globalCategoryRepository.GetDescendantIdsAsync(categoryId, includeSelf);
+            return ServiceResponse<IEnumerable<Guid>>.Success(ids);
+        }
+
         // ✅ New: Statistics for Admin dashboard
         public async Task<ServiceResponse<object>> GetStatisticsAsync()
         {

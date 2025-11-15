@@ -1,4 +1,4 @@
-﻿using eCommerceApp.Aplication.DTOs.GlobalCategory;
+using eCommerceApp.Aplication.DTOs.GlobalCategory;
 using eCommerceApp.Aplication.DTOs;
 using eCommerceApp.Aplication.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -38,6 +38,18 @@ namespace eCommerceApp.Host.Controllers
         {
             var response = await _globalCategoryService.GetCategoriesByParentIdAsync(parentId);
             return Ok(response);
+        }
+
+        // ✅ New: Get descendant IDs for a category
+        [HttpGet("{id:guid}/descendants")]
+        [ProducesResponseType(typeof(ServiceResponse<IEnumerable<Guid>>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetDescendantIds(Guid id, [FromQuery] bool includeSelf = false)
+        {
+            var response = await _globalCategoryService.GetDescendantIdsAsync(id, includeSelf);
+            return response.Succeeded
+                ? Ok(response)
+                : StatusCode((int)response.StatusCode, response);
         }
 
         [HttpPost("add")]
