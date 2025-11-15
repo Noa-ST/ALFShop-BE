@@ -18,9 +18,13 @@ namespace eCommerceApp.Infrastructure.Services
         public CloudinaryImageStorageService(IConfiguration config, IAppLogger<CloudinaryImageStorageService> logger)
         {
             _logger = logger;
-            _cloudName = config["Storage:Cloudinary:CloudName"] ?? throw new ArgumentException("Missing Storage:Cloudinary:CloudName");
-            _uploadPreset = config["Storage:Cloudinary:UploadPreset"] ?? throw new ArgumentException("Missing Storage:Cloudinary:UploadPreset");
-            _defaultFolder = config["Storage:Cloudinary:Folder"];
+            _cloudName = (config["Storage:Cloudinary:CloudName"] ?? throw new ArgumentException("Missing Storage:Cloudinary:CloudName")).Trim();
+            _uploadPreset = (config["Storage:Cloudinary:UploadPreset"] ?? throw new ArgumentException("Missing Storage:Cloudinary:UploadPreset")).Trim();
+            var folder = config["Storage:Cloudinary:Folder"];
+            _defaultFolder = string.IsNullOrWhiteSpace(folder) ? null : folder.Trim();
+
+            // Log cấu hình Cloudinary ở runtime để xác nhận giá trị đang dùng
+            _logger.LogInformation($"Cloudinary initialized: CloudName={_cloudName}, UploadPreset={_uploadPreset}, DefaultFolder={_defaultFolder ?? "(none)"}");
         }
 
         public async Task<string> UploadBase64Async(string base64, string? folder = null, CancellationToken cancellationToken = default)
@@ -38,13 +42,20 @@ namespace eCommerceApp.Infrastructure.Services
 
             var endpoint = $"https://api.cloudinary.com/v1_1/{_cloudName}/image/upload";
             using var form = new MultipartFormDataContent();
-            form.Add(new StringContent($"data:image/*;base64,{data}"), "file");
+
+            // Nếu đầu vào đã là data URI thì giữ nguyên, nếu chỉ là base64 thì wrap lại
+            var isDataUri = base64.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
+            var fileFieldValue = isDataUri ? base64 : $"data:image/*;base64,{data}";
+            form.Add(new StringContent(fileFieldValue, Encoding.UTF8), "file");
             form.Add(new StringContent(_uploadPreset), "upload_preset");
             var targetFolder = folder ?? _defaultFolder;
             if (!string.IsNullOrWhiteSpace(targetFolder))
             {
                 form.Add(new StringContent(targetFolder!), "folder");
             }
+
+            // Ghi log chi tiết trước khi gọi Cloudinary
+            _logger.LogInformation($"Cloudinary upload: endpoint={endpoint}, preset={_uploadPreset}, folder={targetFolder ?? "(none)"}, dataLen={data.Length}");
 
             var resp = await _httpClient.PostAsync(endpoint, form, cancellationToken);
             var content = await resp.Content.ReadAsStringAsync(cancellationToken);
