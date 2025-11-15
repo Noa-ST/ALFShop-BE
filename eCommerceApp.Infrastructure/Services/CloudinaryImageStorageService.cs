@@ -32,7 +32,7 @@ namespace eCommerceApp.Infrastructure.Services
             if (string.IsNullOrWhiteSpace(base64))
                 throw new ArgumentException("Base64 content is empty");
 
-            // Chấp nhận cả dạng data URI "data:image/png;base64,AAAA..." hoặc chỉ phần base64
+            // Giữ nguyên data URI nếu đầu vào đã là data:image/...; nếu không, tách phần sau dấu ','
             var data = base64;
             var commaIndex = base64.IndexOf(',');
             if (commaIndex >= 0)
@@ -40,25 +40,46 @@ namespace eCommerceApp.Infrastructure.Services
                 data = base64.Substring(commaIndex + 1);
             }
 
-            var endpoint = $"https://api.cloudinary.com/v1_1/{_cloudName}/image/upload";
-            using var form = new MultipartFormDataContent();
+            var endpointBase = $"https://api.cloudinary.com/v1_1/{_cloudName}/image/upload";
+            var targetFolder = string.IsNullOrWhiteSpace(folder) ? _defaultFolder : folder;
 
-            // Nếu đầu vào đã là data URI thì giữ nguyên, nếu chỉ là base64 thì wrap lại
-            var isDataUri = base64.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
-            var fileFieldValue = isDataUri ? base64 : $"data:image/*;base64,{data}";
-            form.Add(new StringContent(fileFieldValue, Encoding.UTF8), "file");
-            form.Add(new StringContent(_uploadPreset), "upload_preset");
-            var targetFolder = folder ?? _defaultFolder;
+            _logger.LogInformation($"Cloudinary upload: endpoint={endpointBase}, preset={_uploadPreset}, folder={(string.IsNullOrWhiteSpace(targetFolder) ? "(none)" : targetFolder)}, dataLen={(data?.Length ?? 0)}");
+
+            // Lần 1: dùng application/x-www-form-urlencoded
+            var values = new List<KeyValuePair<string, string>>
+            {
+                new("file", $"data:image/*;base64,{data}"),
+                new("upload_preset", _uploadPreset)
+            };
             if (!string.IsNullOrWhiteSpace(targetFolder))
             {
-                form.Add(new StringContent(targetFolder!), "folder");
+                values.Add(new("folder", targetFolder!));
             }
 
-            // Ghi log chi tiết trước khi gọi Cloudinary
-            _logger.LogInformation($"Cloudinary upload: endpoint={endpoint}, preset={_uploadPreset}, folder={targetFolder ?? "(none)"}, dataLen={data.Length}");
-
-            var resp = await _httpClient.PostAsync(endpoint, form, cancellationToken);
+            using var formUrlEncoded = new FormUrlEncodedContent(values);
+            var resp = await _httpClient.PostAsync(endpointBase, formUrlEncoded, cancellationToken);
             var content = await resp.Content.ReadAsStringAsync(cancellationToken);
+
+            // Nếu fail vì Cloudinary không thấy upload_preset, thử fallback: gửi upload_preset trên query string
+            if (!resp.IsSuccessStatusCode && content.Contains("Upload preset must be specified", StringComparison.OrdinalIgnoreCase))
+            {
+                var endpointWithQuery = $"{endpointBase}?upload_preset={Uri.EscapeDataString(_uploadPreset)}";
+                _logger.LogInformation($"Retry with query preset: endpoint={endpointWithQuery}, folder={(string.IsNullOrWhiteSpace(targetFolder) ? "(none)" : targetFolder)}");
+
+                var retryValues = new List<KeyValuePair<string, string>>
+                {
+                    new("file", $"data:image/*;base64,{data}")
+                };
+                if (!string.IsNullOrWhiteSpace(targetFolder))
+                {
+                    retryValues.Add(new("folder", targetFolder!));
+                }
+
+                using var retryForm = new FormUrlEncodedContent(retryValues);
+                resp = await _httpClient.PostAsync(endpointWithQuery, retryForm, cancellationToken);
+                content = await resp.Content.ReadAsStringAsync(cancellationToken);
+            }
+
             if (!resp.IsSuccessStatusCode)
             {
                 _logger.LogWarning($"Cloudinary upload failed: Status={(int)resp.StatusCode}, Body={content}.");
